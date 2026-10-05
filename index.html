@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบเช็คพัสดุสินค้าตีกลับ - TikTok Returns</title>
+  
+  <!-- Google Fonts: Prompt & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- SheetJS (xlsx) for reading/writing Excel files in browser -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- HTML5-QRCode Scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  
+  <!-- SweetAlert2 for modern alerts -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-800 antialiased selection:bg-blue-500 selection:text-white pb-12">
+
+  <!-- ========================================== -->
+  <!-- HEADER & NAVIGATION                        -->
+  <!-- ========================================== -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6">
+      <div class="flex items-center justify-between h-16">
+        <!-- Logo & Title -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">TikTok Return Inspector</h1>
+            <p class="text-xs text-slate-500 hidden sm:block">ระบบเช็คพัสดุสินค้าตีกลับ คลังสินค้า</p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs (Desktop) -->
+        <nav class="hidden md:flex items-center space-x-1">
+          <button onclick="switchTab('warehouse')" data-tab="warehouse" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+            <span>สแกนตรวจพัสดุ</span>
+          </button>
+          <button onclick="switchTab('dashboard')" data-tab="dashboard" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            <span>แดชบอร์ด (แอดมิน)</span>
+          </button>
+          <button onclick="switchTab('import')" data-tab="import" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span>นำเข้า Excel</span>
+          </button>
+          <button onclick="switchTab('settings')" data-tab="settings" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>ตั้งค่า</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 safe-bottom">
+    <div class="grid grid-cols-4 h-14">
+      <button onclick="switchTab('warehouse')" data-tab="warehouse" class="nav-btn flex flex-col items-center justify-center text-slate-500 hover:text-blue-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+        <span class="text-[10px] mt-0.5">ตรวจพัสดุ</span>
+      </button>
+      <button onclick="switchTab('dashboard')" data-tab="dashboard" class="nav-btn flex flex-col items-center justify-center text-slate-500 hover:text-blue-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <span class="text-[10px] mt-0.5">แดชบอร์ด</span>
+      </button>
+      <button onclick="switchTab('import')" data-tab="import" class="nav-btn flex flex-col items-center justify-center text-slate-500 hover:text-blue-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        <span class="text-[10px] mt-0.5">นำเข้าไฟล์</span>
+      </button>
+      <button onclick="switchTab('settings')" data-tab="settings" class="nav-btn flex flex-col items-center justify-center text-slate-500 hover:text-blue-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-[10px] mt-0.5">ตั้งค่า</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========================================== -->
+  <!-- MAIN CONTENT CONTAINER                     -->
+  <!-- ========================================== -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- ======================================== -->
+    <!-- TAB 1: WAREHOUSE SCAN & INSPECTION       -->
+    <!-- ======================================== -->
+    <section id="tab-warehouse" class="space-y-6">
+      
+      <!-- Welcome / Big Scan Trigger Card -->
+      <div id="welcome-card" class="bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 text-center relative overflow-hidden">
+        <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+        
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur tracking-wider uppercase mb-4">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          Warehouse Portal
+        </span>
+        
+        <h2 class="text-2xl sm:text-3xl font-bold tracking-tight">ตรวจเช็คพัสดุตีกลับ</h2>
+        <p class="text-blue-100 text-sm mt-2 max-w-md mx-auto">สแกนบาร์โค้ด Tracking ID หน้ากล่อง เพื่อดึงรายการสินค้าและตรวจสอบความครบถ้วน</p>
+
+        <!-- Big Scan Action Button -->
+        <div class="mt-6">
+          <button onclick="initScanner()" class="w-full max-w-sm mx-auto py-4 px-6 bg-white text-blue-600 hover:bg-blue-50 active:scale-95 font-bold rounded-2xl shadow-lg transition-all flex items-center justify-center gap-3 text-lg">
+            <svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+            </svg>
+            <span>กดเพื่อเปิดกล้องสแกน</span>
+          </button>
+        </div>
+
+        <!-- Manual Input Form -->
+        <div class="mt-6 pt-6 border-t border-white/15 max-w-sm mx-auto">
+          <label class="block text-xs text-blue-200 mb-2">หรือพิมพ์เลข Tracking / Order ID ด้วยตนเอง</label>
+          <div class="flex gap-2">
+            <input type="text" id="manual-tracking-input" placeholder="เช่น JTTH205684373790..." class="flex-1 px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-blue-200 text-sm focus:outline-none focus:bg-white/20 focus:border-white">
+            <button onclick="handleSearchTracking(document.getElementById('manual-tracking-input').value)" class="px-4 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl text-sm transition-colors">
+              ค้นหา
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Inspection Form (Hidden by default until order found) -->
+      <div id="inspection-form" class="hidden space-y-6">
+        
+        <!-- Header Info Card -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">เลขพัสดุ (Tracking ID)</span>
+              <h3 id="inspect-tracking-id" class="text-xl font-bold font-mono text-blue-600 mt-0.5">-</h3>
+            </div>
+            <div id="inspect-status-badge">
+              <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">⏳ ยังไม่ตรวจ</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-xs sm:text-sm">
+            <div>
+              <span class="text-slate-400 block">เลขคำสั่งซื้อ (Order ID):</span>
+              <span id="inspect-order-id" class="font-mono font-medium text-slate-700">-</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block">ขนส่ง:</span>
+              <span id="inspect-carrier" class="font-medium text-slate-700">-</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block">ลูกค้า:</span>
+              <span id="inspect-buyer" class="font-medium text-slate-700">-</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block">เหตุผลการตีกลับ:</span>
+              <span id="inspect-reason" class="font-medium text-rose-600">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Items Checklist Card -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-slate-900 flex items-center gap-2 text-base">
+              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              <span>รายการสินค้าที่ต้องตรวจ</span>
+            </h4>
+            <div class="flex gap-2">
+              <button onclick="checkAllItems(true)" class="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors">
+                ✓ ติ๊กครบทุกชิ้น
+              </button>
+            </div>
+          </div>
+
+          <!-- Items Dynamic Container -->
+          <div id="inspection-items-list" class="space-y-2.5">
+            <!-- Dynamic Items Rows -->
+          </div>
+        </div>
+
+        <!-- Media Attachment Card (Box Photo & Unboxing Video) -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <h4 class="font-bold text-slate-900 flex items-center gap-2 text-base">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>หลักฐานรูปภาพและวิดีโอ</span>
+          </h4>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <!-- 1. Photo Capture Box -->
+            <div class="space-y-2">
+              <label class="block text-xs font-medium text-slate-600">📷 รูปถ่ายกล่องพัสดุตีกลับ / หน้าซอง</label>
+              
+              <!-- Placeholder / Input Button -->
+              <div id="photo-upload-placeholder" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50 relative">
+                <input type="file" id="photo-input" accept="image/*" capture="environment" onchange="handlePhotoCapture(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <svg class="w-8 h-8 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <span class="block text-xs font-semibold text-blue-600 mt-2">กดเพื่อถ่ายรูปกล่องพัสดุ</span>
+                <span class="block text-[11px] text-slate-400">ระบบบีบอัดอัตโนมัติ ส่งไวใน 1 วิ</span>
+              </div>
+
+              <!-- Photo Preview -->
+              <div id="photo-preview-container" class="hidden relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                <img id="photo-preview" src="" alt="Preview" class="w-full h-40 object-cover">
+                <div class="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur" id="photo-size-badge">
+                  0 KB
+                </div>
+                <button onclick="removePhoto()" class="absolute top-2 right-2 bg-rose-600 text-white p-1 rounded-full shadow hover:bg-rose-700">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Video Capture Box -->
+            <div class="space-y-2">
+              <label class="block text-xs font-medium text-slate-600">🎥 วิดีโอแกะกล่อง / ตรวจสภาพสินค้า</label>
+              
+              <!-- Placeholder / Input Button -->
+              <div id="video-upload-placeholder" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50 relative">
+                <input type="file" id="video-input" accept="video/*" capture="environment" onchange="handleVideoCapture(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                <svg class="w-8 h-8 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <span class="block text-xs font-semibold text-blue-600 mt-2">กดเพื่อถ่ายคลิปวิดีโอ</span>
+                <span class="block text-[11px] text-slate-400">แนะนำความยาว 15 - 30 วินาที</span>
+              </div>
+
+              <!-- Video Preview -->
+              <div id="video-preview-container" class="hidden relative rounded-xl overflow-hidden border border-slate-200 bg-black">
+                <video id="video-preview" controls class="w-full h-40 object-cover"></video>
+                <div class="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur" id="video-size-badge">
+                  0 MB
+                </div>
+                <button onclick="removeVideo()" class="absolute top-2 right-2 bg-rose-600 text-white p-1 rounded-full shadow hover:bg-rose-700">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Check Result & Note Card -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">สถานะผลการตรวจพัสดุ</label>
+              <select id="inspect-status-select" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="AUTO">✨ คำนวณอัตโนมัติตาม Checklist</option>
+                <option value="ตรวจแล้ว (ครบถ้วน)">✅ ตรวจแล้ว (ครบถ้วนสมบูรณ์)</option>
+                <option value="ตรวจแล้ว (สินค้าไม่ครบ)">⚠️ ตรวจแล้ว (สินค้าไม่ครบ)</option>
+                <option value="ตรวจแล้ว (สินค้าชำรุดเสียหาย)">❌ ตรวจแล้ว (สินค้าชำรุดเสียหาย)</option>
+                <option value="ตรวจแล้ว (สินค้าไม่ตรงปก/ผิดแบบ)">🔄 ตรวจแล้ว (สินค้าผิดแบบ/ไม่ตรงปก)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">ชื่อพนักงานผู้ตรวจ</label>
+              <input type="text" id="inspect-staff-name" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ชื่อพนักงาน">
+            </div>
+
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">หมายเหตุเพิ่มเติม (ถ้ามี)</label>
+            <textarea id="inspect-notes" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น กล่องบุบเล็กน้อย สินค้าด้านในไม่แตกหัก..."></textarea>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex gap-3 pt-2">
+            <button onclick="resetToWelcome()" class="w-1/3 py-3.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-colors">
+              ยกเลิก
+            </button>
+            <button onclick="submitInspection()" class="flex-1 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-sm shadow-md shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span>บันทึกผลการตรวจพัสดุ</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recent Scans History -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">ประวัติการสแกนล่าสุดของคุณ</h3>
+        <div id="recent-scans-list" class="space-y-2">
+          <!-- Dynamic Recent Scans -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================== -->
+    <!-- TAB 2: ADMIN DASHBOARD                   -->
+    <!-- ======================================== -->
+    <section id="tab-dashboard" class="hidden space-y-6">
+      
+      <!-- Stats Overview Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-semibold uppercase">พัสดุคืนทั้งหมด</span>
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+          </div>
+          <div id="stat-total" class="text-2xl sm:text-3xl font-bold text-slate-900">0</div>
+          <span class="text-[11px] text-slate-500">รวมจาก TikTok Excel</span>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-semibold uppercase">ตรวจแล้ว (ครบ)</span>
+            <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div id="stat-completed" class="text-2xl sm:text-3xl font-bold text-emerald-600">0</div>
+          <span class="text-[11px] text-emerald-600 font-medium">สินค้าครบถ้วน</span>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-semibold uppercase">มีปัญหา / ไม่ครบ</span>
+            <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <div id="stat-issues" class="text-2xl sm:text-3xl font-bold text-rose-600">0</div>
+          <span class="text-[11px] text-rose-600 font-medium">ขาด/ชำรุด/ผิดแบบ</span>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-semibold uppercase">รอดำเนินการ</span>
+            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div id="stat-pending" class="text-2xl sm:text-3xl font-bold text-amber-600">0</div>
+          <span class="text-[11px] text-amber-600 font-medium">ยังไม่ได้สแกน</span>
+        </div>
+
+      </div>
+
+      <!-- Overall Progress Bar -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-600">
+          <span>ความคืบหน้าการตรวจเช็คพัสดุ</span>
+          <span id="stat-progress-text">0%</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+          <div id="stat-progress-bar" class="bg-gradient-to-r from-blue-500 to-emerald-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Dashboard Controls & Filter Toolbar -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+        
+        <div class="flex flex-1 w-full sm:w-auto gap-2">
+          <!-- Search Bar -->
+          <div class="relative flex-1">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" id="admin-search-input" placeholder="ค้นหา Order ID, Tracking ID, SKU..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <!-- Status Filter -->
+          <select id="admin-status-filter" onchange="AppState.adminStatusFilter = this.value; AppState.adminPage = 1; renderDashboard();" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="ALL">ทุกสถานะ</option>
+            <option value="PENDING">⏳ ยังไม่ตรวจ</option>
+            <option value="COMPLETED">✅ ตรวจแล้ว (ครบ)</option>
+            <option value="ISSUES">⚠️ มีปัญหา / ไม่ครบ</option>
+          </select>
+        </div>
+
+        <!-- Action Buttons (Export & Sync) -->
+        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <button onclick="syncSheetCache()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span>รีเฟรชข้อมูล</span>
+          </button>
+          
+          <button onclick="exportInspectedExcel()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span>ส่งออก Excel</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Orders Data Table -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="py-3 px-4">Tracking ID</th>
+                <th class="py-3 px-4">Order ID</th>
+                <th class="py-3 px-4">Seller SKU</th>
+                <th class="py-3 px-4">รายการสินค้า</th>
+                <th class="py-3 px-4 text-center">จำนวนรวม</th>
+                <th class="py-3 px-4">สถานะเช็ค</th>
+                <th class="py-3 px-4 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-table-body" class="divide-y divide-slate-100">
+              <!-- Dynamic Table Rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table Pagination Footer -->
+        <div class="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span id="admin-page-info">หน้า 1 จาก 1</span>
+          <div class="flex gap-1.5">
+            <button id="btn-prev-page" onclick="AppState.adminPage--; renderDashboard();" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg disabled:opacity-40 transition-colors">
+              ก่อนหน้า
+            </button>
+            <button id="btn-next-page" onclick="AppState.adminPage++; renderDashboard();" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg disabled:opacity-40 transition-colors">
+              ถัดไป
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================== -->
+    <!-- TAB 3: EXCEL IMPORT                      -->
+    <!-- ======================================== -->
+    <section id="tab-import" class="hidden space-y-6">
+      
+      <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">นำเข้าไฟล์คำสั่งซื้อจาก TikTok (.xlsx)</h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1">
+            อัปโหลดไฟล์ <b>"ทั้งหมด คำสั่งซื้อ"</b> และ <b>"คำสั่งซื้อที่ส่งคืน_คืนเงิน"</b> ระบบจะกรองและรวมรายการตาม Order ID เดียวกันให้อัตโนมัติ
+          </p>
+        </div>
+
+        <!-- Two Drag & Drop Boxes -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- File 1: All Orders -->
+          <div class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-6 text-center bg-slate-50 relative group transition-colors">
+            <input type="file" id="file-all-orders" accept=".xlsx, .xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="document.getElementById('name-all-orders').innerText = this.files[0] ? this.files[0].name : 'ยังไม่ได้เลือกไฟล์'">
+            <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-3">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <h4 class="font-bold text-slate-800 text-sm">1. ไฟล์ "ทั้งหมด คำสั่งซื้อ"</h4>
+            <p class="text-xs text-slate-400 mt-1">ไฟล์ทั้งหมด คำสั่งซื้อ-xxxx.xlsx</p>
+            <span id="name-all-orders" class="inline-block mt-3 text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100 truncate max-w-xs">
+              คลิกหรือลากไฟล์มาวางที่นี่
+            </span>
+          </div>
+
+          <!-- File 2: Returns & Refunds -->
+          <div class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-6 text-center bg-slate-50 relative group transition-colors">
+            <input type="file" id="file-returns" accept=".xlsx, .xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="document.getElementById('name-returns').innerText = this.files[0] ? this.files[0].name : 'ยังไม่ได้เลือกไฟล์'">
+            <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-3">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z"/></svg>
+            </div>
+            <h4 class="font-bold text-slate-800 text-sm">2. ไฟล์ "คำสั่งซื้อที่ส่งคืน_คืนเงิน"</h4>
+            <p class="text-xs text-slate-400 mt-1">ไฟล์คำสั่งซื้อที่ส่งคืน_คืนเงิน-xxxx.xlsx</p>
+            <span id="name-returns" class="inline-block mt-3 text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100 truncate max-w-xs">
+              คลิกหรือลากไฟล์มาวางที่นี่
+            </span>
+          </div>
+
+        </div>
+
+        <div class="flex justify-center pt-2">
+          <button onclick="handleExcelFilesSelection()" class="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+            <span>เริ่มประมวลผลและรวมรายการ</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Merged Results Section (Hidden until parsed) -->
+      <div id="import-preview-section" class="hidden bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-slate-900 text-base">ตัวอย่างข้อมูลหลังการรวม (Preview)</h3>
+            <p class="text-xs text-slate-500">รวมข้อมูลตาม Order ID เดียวกันเรียบร้อยแล้ว: <span id="import-preview-count" class="font-bold text-blue-600">0 ออเดอร์</span></p>
+          </div>
+          <button onclick="uploadImportedToGoogleSheet()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span>ส่งข้อมูลเข้า Google Sheets</span>
+          </button>
+        </div>
+
+        <div class="overflow-x-auto border border-slate-100 rounded-xl">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 font-bold border-b">
+              <tr>
+                <th class="py-2.5 px-3">Tracking ID</th>
+                <th class="py-2.5 px-3">Order ID</th>
+                <th class="py-2.5 px-3">Seller SKU</th>
+                <th class="py-2.5 px-3">ชื่อสินค้า + จำนวน</th>
+                <th class="py-2.5 px-3 text-center">รวมชิ้น</th>
+              </tr>
+            </thead>
+            <tbody id="import-preview-tbody" class="divide-y divide-slate-100">
+              <!-- Preview Rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================== -->
+    <!-- TAB 4: SETTINGS                          -->
+    <!-- ======================================== -->
+    <section id="tab-settings" class="hidden space-y-6">
+      
+      <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6 max-w-2xl mx-auto">
+        <div class="border-b border-slate-100 pb-4">
+          <h2 class="text-xl font-bold text-slate-900">ตั้งค่าระบบ (System Settings)</h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1">เชื่อมต่อระบบเข้ากับ Google Apps Script Web App และ Google Sheets</p>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+              Google Apps Script Web App URL
+            </label>
+            <input type="text" id="setting-api-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <span class="block text-[11px] text-slate-400 mt-1">
+              URL ที่ได้จากการกด Deploy > New Deployment > Web App ใน Google Apps Script
+            </span>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+              ชื่อพนักงานเริ่มต้น (Default Staff Name)
+            </label>
+            <input type="text" id="setting-staff-name" placeholder="เช่น นายสมชาย (คลัง 1)" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <div class="pt-2 flex flex-col sm:flex-row gap-2">
+            <button onclick="saveSettings()" class="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors">
+              บันทึกการตั้งค่า
+            </button>
+            <button onclick="testApiConnection()" class="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-colors">
+              ทดสอบการเชื่อมต่อ (Test API)
+            </button>
+          </div>
+        </div>
+
+        <!-- Sync Cache Section -->
+        <div class="pt-6 border-t border-slate-100 space-y-3">
+          <h4 class="text-sm font-bold text-slate-800">ระบบแคชความเร็วสูง (High-Speed Local Cache)</h4>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            ดาวน์โหลดข้อมูล Tracking ID จาก Google Sheet มาเก็บไว้ในเครื่องล่วงหน้า ช่วยให้พนักงานสแกนค้นหาพัสดุได้เร็วเสี้ยววินาที แม้สัญญาณเน็ตจะช้า
+          </p>
+          <button onclick="syncSheetCache()" class="py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold rounded-xl text-xs sm:text-sm transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span>ซิงค์ข้อมูลลงแคชในเครื่องทันที</span>
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- CAMERA SCANNER MODAL                       -->
+  <!-- ========================================== -->
+  <div id="scanner-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur flex flex-col items-center justify-between p-4 safe-bottom">
+    
+    <!-- Top Scanner Controls -->
+    <div class="w-full max-w-md flex items-center justify-between text-white py-2">
+      <span class="text-sm font-semibold tracking-wide flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        กำลังสแกน Barcode / QR
+      </span>
+      <div class="flex items-center gap-2">
+        <button onclick="switchCamera()" class="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+        <button onclick="stopScanner()" class="p-2 bg-rose-600 hover:bg-rose-700 rounded-full text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Scanner Viewport Frame -->
+    <div class="w-full max-w-sm flex-1 flex items-center justify-center relative my-auto">
+      <div class="relative w-full rounded-3xl overflow-hidden border-2 border-white/30 shadow-2xl bg-black">
+        <div id="reader" class="w-full"></div>
+        
+        <!-- Laser & Corner overlays -->
+        <div class="scanner-laser pointer-events-none"></div>
+        <div class="scanner-corner scanner-corner-tl pointer-events-none"></div>
+        <div class="scanner-corner scanner-corner-tr pointer-events-none"></div>
+        <div class="scanner-corner scanner-corner-bl pointer-events-none"></div>
+        <div class="scanner-corner scanner-corner-br pointer-events-none"></div>
+      </div>
+    </div>
+
+    <!-- Bottom Scanner Hint -->
+    <div class="w-full max-w-md text-center text-white/70 text-xs py-2">
+      วางบาร์โค้ด Tracking ID ให้อยู่ในกรอบสี่เหลี่ยม ระบบจะอ่านอัตโนมัติ
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ORDER DETAIL MODAL (ADMIN DASHBOARD)       -->
+  <!-- ========================================== -->
+  <div id="order-detail-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
+      
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <span class="text-xs text-slate-400 font-semibold uppercase">รายละเอียดพัสดุ</span>
+          <h3 id="modal-tracking-id" class="text-lg font-bold font-mono text-blue-600">-</h3>
+        </div>
+        <button onclick="closeOrderDetailModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 text-xs sm:text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div><span class="text-slate-400 block">Order ID:</span> <span id="modal-order-id" class="font-mono font-semibold text-slate-700">-</span></div>
+        <div><span class="text-slate-400 block">สถานะตรวจ:</span> <span id="modal-status" class="font-bold text-blue-600">-</span></div>
+        <div><span class="text-slate-400 block">ขนส่ง:</span> <span id="modal-carrier" class="font-medium text-slate-700">-</span></div>
+        <div><span class="text-slate-400 block">เหตุผลการคืน:</span> <span id="modal-reason" class="font-medium text-rose-600">-</span></div>
+        <div><span class="text-slate-400 block">ผู้ตรวจ:</span> <span id="modal-staff" class="font-medium text-slate-700">-</span></div>
+        <div><span class="text-slate-400 block">หมายเหตุ:</span> <span id="modal-note" class="font-medium text-slate-700">-</span></div>
+      </div>
+
+      <!-- Items List in Modal -->
+      <div class="space-y-2">
+        <h4 class="text-xs font-bold text-slate-700 uppercase">รายการสินค้าในออเดอร์</h4>
+        <div id="modal-items-list" class="space-y-2 max-h-48 overflow-y-auto">
+          <!-- Dynamic Modal Items -->
+        </div>
+      </div>
+
+      <!-- Photos and Videos in Modal -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 uppercase mb-2">รูปถ่ายกล่องพัสดุ</h4>
+          <img id="modal-photo" src="" alt="Photo" class="w-full h-44 object-cover rounded-xl border border-slate-200 bg-slate-100">
+          <div id="modal-no-photo" class="w-full h-44 rounded-xl border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-xs text-slate-400">
+            ไม่มีรูปถ่าย
+          </div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 uppercase mb-2">วิดีโอแกะกล่อง</h4>
+          <video id="modal-video" controls class="w-full h-44 object-cover rounded-xl border border-slate-200 bg-black"></video>
+          <div id="modal-no-video" class="w-full h-44 rounded-xl border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-xs text-slate-400">
+            ไม่มีวิดีโอ
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-3">
+        <button onclick="closeOrderDetailModal()" class="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-colors">
+          ปิดหน้าต่าง
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Application Logic JS -->
+  <script src="js/app.js"></script>
+</body>
+</html>
