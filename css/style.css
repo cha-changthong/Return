@@ -1,0 +1,134 @@
+/* Custom Styles for TikTok Return Parcel Inspection System */
+
+:root {
+  --primary: #3B82F6;
+  --primary-dark: #1D4ED8;
+  --secondary: #10B981;
+  --accent: #F59E0B;
+  --danger: #EF4444;
+  --dark: #0F172A;
+  --card-bg: #FFFFFF;
+}
+
+body {
+  font-family: 'Prompt', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #F8FAFC;
+  color: #1E293B;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Glassmorphism & Modern Card Effects */
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dark-glass {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+/* Scanner viewport animation */
+.scanner-laser {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #3B82F6, #60A5FA, #3B82F6, transparent);
+  box-shadow: 0 0 15px #3B82F6, 0 0 25px #60A5FA;
+  animation: laserScan 2s ease-in-out infinite;
+}
+
+@keyframes laserScan {
+  0% { top: 5%; opacity: 0.8; }
+  50% { top: 90%; opacity: 1; }
+  100% { top: 5%; opacity: 0.8; }
+}
+
+/* Scanner target box corners */
+.scanner-corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-color: #3B82F6;
+  border-width: 4px;
+}
+.scanner-corner-tl { top: 12px; left: 12px; border-style: solid none none solid; border-radius: 8px 0 0 0; }
+.scanner-corner-tr { top: 12px; right: 12px; border-style: solid solid none none; border-radius: 0 8px 0 0; }
+.scanner-corner-bl { bottom: 12px; left: 12px; border-style: none none solid solid; border-radius: 0 0 0 8px; }
+.scanner-corner-br { bottom: 12px; right: 12px; border-style: none solid solid none; border-radius: 0 0 8px 0; }
+
+/* Pulse animation for active camera */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 0.4; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.pulse-active {
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Touch feedback for mobile */
+.touch-scale {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.touch-scale:active {
+  transform: scale(0.97);
+}
+
+/* Item checklist styling */
+.item-checkbox:checked + div {
+  border-color: #10B981;
+  background-color: #F0FDF4;
+}
+.item-checkbox:checked + div .check-icon {
+  background-color: #10B981;
+  color: white;
+  border-color: #10B981;
+}
+
+/* Progress bar animation */
+@keyframes progressStripes {
+  0% { background-position: 1rem 0; }
+  100% { background-position: 0 0; }
+}
+
+.progress-striped {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.2) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.2) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: progressStripes 1s linear infinite;
+}
+
+/* Mobile bottom nav safe area */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 1rem);
+}
