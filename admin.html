@@ -68,43 +68,55 @@
     <!-- ======================================== -->
     <section id="admin-tab-dashboard" class="space-y-6">
 
-      <!-- Stats Overview Cards -->
+      <!-- Stats Overview Cards (Clickable Filters) -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div onclick="setAdminFilter('ALL')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-500 hover:shadow-md active:scale-95 transition-all group">
           <div class="flex items-center justify-between text-slate-400 mb-2">
-            <span class="text-xs font-semibold uppercase">พัสดุคืนทั้งหมด</span>
+            <span class="text-xs font-semibold uppercase group-hover:text-blue-600 transition-colors">พัสดุคืนทั้งหมด</span>
             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
           </div>
           <div id="stat-total" class="text-2xl sm:text-3xl font-bold text-slate-900">0</div>
-          <span class="text-[11px] text-slate-500">รวมจาก TikTok Excel</span>
+          <span class="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+            <span>กดดูกล่องทั้งหมด</span>
+            <span class="text-blue-600 font-bold">➔</span>
+          </span>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div onclick="setAdminFilter('COMPLETED')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-emerald-500 hover:shadow-md active:scale-95 transition-all group">
           <div class="flex items-center justify-between text-slate-400 mb-2">
-            <span class="text-xs font-semibold uppercase">ตรวจแล้ว (ครบ)</span>
+            <span class="text-xs font-semibold uppercase group-hover:text-emerald-600 transition-colors">ตรวจแล้ว (ครบ)</span>
             <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
           <div id="stat-completed" class="text-2xl sm:text-3xl font-bold text-emerald-600">0</div>
-          <span class="text-[11px] text-emerald-600 font-medium">สินค้าครบถ้วน</span>
+          <span class="text-[11px] text-emerald-600 font-medium flex items-center gap-1 mt-1">
+            <span>กดกรองดูที่ครบ</span>
+            <span class="font-bold">➔</span>
+          </span>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div onclick="setAdminFilter('ISSUES')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-rose-500 hover:shadow-md active:scale-95 transition-all group">
           <div class="flex items-center justify-between text-slate-400 mb-2">
-            <span class="text-xs font-semibold uppercase">มีปัญหา / ไม่ครบ</span>
+            <span class="text-xs font-semibold uppercase group-hover:text-rose-600 transition-colors">มีปัญหา / ไม่ครบ</span>
             <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
           </div>
           <div id="stat-issues" class="text-2xl sm:text-3xl font-bold text-rose-600">0</div>
-          <span class="text-[11px] text-rose-600 font-medium">ขาด/ชำรุด/ผิดแบบ</span>
+          <span class="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
+            <span>กดกรองดูปัญหา</span>
+            <span class="font-bold">➔</span>
+          </span>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div onclick="setAdminFilter('PENDING')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:border-amber-500 hover:shadow-md active:scale-95 transition-all group">
           <div class="flex items-center justify-between text-slate-400 mb-2">
-            <span class="text-xs font-semibold uppercase">รอดำเนินการ</span>
+            <span class="text-xs font-semibold uppercase group-hover:text-amber-600 transition-colors">รอดำเนินการ</span>
             <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
           <div id="stat-pending" class="text-2xl sm:text-3xl font-bold text-amber-600">0</div>
-          <span class="text-[11px] text-amber-600 font-medium">ยังไม่ได้ตรวจ</span>
+          <span class="text-[11px] text-amber-600 font-medium flex items-center gap-1 mt-1">
+            <span>กดกรองดูที่ยังไม่ตรวจ</span>
+            <span class="font-bold">➔</span>
+          </span>
         </div>
 
       </div>
