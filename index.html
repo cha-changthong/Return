@@ -265,19 +265,37 @@
         <span class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
         ส่องบาร์โค้ดหน้ากล่อง
       </span>
-      <button onclick="stopScanner()" class="p-2.5 bg-rose-600 text-white rounded-full">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
+      
+      <div class="flex items-center gap-2">
+        <!-- Flashlight / Torch Toggle Button -->
+        <button id="torch-btn" onclick="toggleTorch()" title="เปิด/ปิดไฟฉาย" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-full transition-all">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </button>
+        <!-- Close Scanner -->
+        <button onclick="stopScanner()" class="p-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full transition-all">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
-    <!-- Live Scanner Box (Wide Window for 1D Tracking Barcodes) -->
-    <div class="w-full max-w-sm relative my-auto rounded-3xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black">
-      <div id="reader" class="w-full"></div>
-      <div class="scanner-laser pointer-events-none"></div>
+    <!-- Live Scanner Box (Direct Hardware Accelerated Video Stream) -->
+    <div class="w-full max-w-sm relative my-auto rounded-3xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black aspect-[3/4] flex items-center justify-center">
+      <video id="scanner-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+      <div id="reader" class="hidden w-full"></div>
+      
+      <!-- Target Aim Frame -->
+      <div class="absolute inset-x-4 top-1/2 -translate-y-1/2 h-36 border-2 border-blue-400/80 rounded-2xl bg-blue-500/10 pointer-events-none flex items-center justify-center">
+        <div class="scanner-laser pointer-events-none"></div>
+      </div>
     </div>
 
-    <div class="text-center text-white/90 text-sm font-semibold py-3">
-      วางแถบบาร์โค้ดให้อยู่ในกรอบแนวนอน กล้องจะตรวจจับอัตโนมัติ
+    <div class="text-center text-white/90 text-sm font-semibold py-3 flex flex-col items-center gap-1">
+      <span>วางบาร์โค้ดหรือ QR Code หน้ากล่องให้อยู่ในกรอบ</span>
+      <span class="text-xs text-white/60">หากมืดหรือแสงสะท้อน สามารถกดปุ่ม ⚡ ไฟฉาย ด้านบนได้</span>
     </div>
   </div>
 
