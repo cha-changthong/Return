@@ -47,17 +47,73 @@ function switchAdminTab(tabName) {
 }
 
 // ==========================================
-// 2. DATA SYNC FROM GOOGLE SHEETS
+// 2. DATA SYNC FROM GOOGLE SHEETS (HYBRID JSONP / POST)
 // ==========================================
+function fetchJSONP(url, timeout = 10000) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_admin_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const script = document.createElement('script');
+    let timer = null;
+
+    window[callbackName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    function cleanup() {
+      if (timer) clearTimeout(timer);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete window[callbackName];
+    }
+
+    timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP Timeout'));
+    }, timeout);
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('JSONP Script Error'));
+    };
+
+    const separator = url.includes('?') ? '&' : '?';
+    script.src = `${url}${separator}callback=${callbackName}&_t=${Date.now()}`;
+    document.head.appendChild(script);
+  });
+}
+
+async function apiFetchAdminOrders() {
+  // 1. Try JSONP (Zero CORS, Zero 404 redirect issues)
+  try {
+    const data = await fetchJSONP(`${API_URL}?action=getOrders&limit=5000`, 10000);
+    if (data && data.success) return data;
+  } catch(e) {
+    console.warn('JSONP fetch attempt failed, trying POST fallback:', e);
+  }
+
+  // 2. Fallback to POST fetch
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'getOrders', limit: 5000 })
+    });
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch(e) {
+    console.error('All fetch methods failed:', e);
+    throw e;
+  }
+}
+
 async function refreshOrdersFromSheet(showToast = false) {
   const icon = document.getElementById('admin-refresh-icon');
   if (icon) icon.classList.add('animate-spin');
 
   try {
-    const res = await fetch(`${API_URL}?action=getOrders&limit=5000&_t=${Date.now()}`);
-    const data = await res.json();
+    const data = await apiFetchAdminOrders();
 
-    if (data.success && data.orders) {
+    if (data && data.success && data.orders) {
       AdminState.orders = data.orders;
       localStorage.setItem('admin_cached_orders', JSON.stringify(data.orders));
       applyFilters();
@@ -74,7 +130,7 @@ async function refreshOrdersFromSheet(showToast = false) {
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch orders:', err);
+    console.warn('Failed to fetch orders, using cache:', err);
     const cached = localStorage.getItem('admin_cached_orders');
     if (cached) {
       AdminState.orders = JSON.parse(cached);
