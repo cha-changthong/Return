@@ -282,10 +282,10 @@
       </div>
     </div>
 
-    <!-- Live Scanner Box (Direct Hardware Accelerated Video Stream) -->
-    <div class="w-full max-w-sm relative my-auto rounded-3xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black aspect-[3/4] flex items-center justify-center">
-      <video id="scanner-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
-      <div id="reader" class="hidden w-full"></div>
+    <!-- Live Scanner Box (Auto-Switches: Android Native Hardware / iPhone ZXing) -->
+    <div class="w-full max-w-sm relative my-auto rounded-3xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black min-h-[300px] flex items-center justify-center">
+      <video id="scanner-video" autoplay playsinline webkit-playsinline muted class="hidden w-full h-full object-cover"></video>
+      <div id="reader" class="w-full h-full"></div>
       
       <!-- Target Aim Frame -->
       <div class="absolute inset-x-4 top-1/2 -translate-y-1/2 h-36 border-2 border-blue-400/80 rounded-2xl bg-blue-500/10 pointer-events-none flex items-center justify-center">
