@@ -6,9 +6,11 @@
 // ==========================================
 // 1. STATE & CONSTANTS
 // ==========================================
+const DEFAULT_API_ENDPOINT = "https://script.google.com/macros/s/AKfycbxs3LzbtEOj2036lhcXrZOtr9hkh0Dg2349rSjQ0H-hX3maVZUgrVEt3N_3FsreWFeb/exec";
+
 const AppState = {
   currentTab: 'warehouse', // 'warehouse' | 'dashboard' | 'import' | 'settings'
-  apiEndpoint: localStorage.getItem('tiktok_return_api_url') || '',
+  apiEndpoint: DEFAULT_API_ENDPOINT,
   staffName: localStorage.getItem('tiktok_return_staff_name') || 'พนักงานคลัง 1',
   orders: [],
   currentOrder: null,
@@ -364,26 +366,60 @@ async function processTikTokExcelFiles(ordersFile, returnsFile) {
 // 5. API CLIENT (Google Apps Script Backend)
 // ==========================================
 const ApiClient = {
-  async fetchWithTimeout(url, options = {}, timeout = 15000) {
+  // ฟังก์ชันช่วยจัดรูปแบบ Web App URL ให้ถูกต้องเสมอ (เติม /exec ให้อัตโนมัติถ้าลืม)
+  normalizeUrl(url) {
+    if (!url) return '';
+    let clean = url.trim();
+    // ตัด query parameter เดิมออกถ้ามี
+    clean = clean.split('?')[0];
+    if (clean.startsWith('https://script.google.com/macros/s/') && !clean.endsWith('/exec')) {
+      clean = clean.replace(/\/+$/, '') + '/exec';
+    }
+    return clean;
+  },
+
+  async fetchWithTimeout(url, options = {}, timeout = 30000) {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
+    const id = setTimeout(() => {
+      controller.abort();
+    }, timeout);
     try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
+      const response = await fetch(url, { 
+        ...options, 
+        signal: controller.signal,
+        redirect: 'follow'
+      });
       clearTimeout(id);
       return response;
     } catch (err) {
       clearTimeout(id);
+      if (err.name === 'AbortError') {
+        throw new Error('การเชื่อมต่อหมดเวลา (Timeout) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบ Web App URL');
+      }
       throw err;
     }
   },
 
   async ping() {
-    if (!AppState.apiEndpoint) return { success: false, message: 'ไม่ได้ตั้งค่า API Web App URL' };
+    const endpoint = this.normalizeUrl(AppState.apiEndpoint);
+    if (!endpoint) return { success: false, error: 'ไม่ได้ระบุ Google Apps Script Web App URL' };
+    
     try {
-      const res = await this.fetchWithTimeout(`${AppState.apiEndpoint}?action=ping`, {}, 8000);
-      return await res.json();
+      const url = `${endpoint}?action=ping&_t=${Date.now()}`;
+      const res = await this.fetchWithTimeout(url, { method: 'GET' }, 25000);
+      
+      if (!res.ok) {
+        if (res.status === 404) {
+          return { success: false, error: 'ไม่พบ Web App URL นี้ (HTTP 404) กรุณาตรวจสอบว่าคัดลอก URL มาถูกต้องครบถ้วนและลงท้ายด้วย /exec' };
+        }
+        return { success: false, error: `Google Server ตอบกลับด้วยสถานะ HTTP ${res.status}` };
+      }
+      
+      const data = await res.json();
+      return data;
     } catch (err) {
-      return { success: false, error: err.toString() };
+      console.warn('Ping error:', err);
+      return { success: false, error: err.message || err.toString() };
     }
   },
 
@@ -402,10 +438,11 @@ const ApiClient = {
     }
 
     // 2. ถ้าใน Local Cache ไม่เจอ หรือยังไม่ได้โหลด ให้ดึงจาก Apps Script Backend
-    if (AppState.apiEndpoint) {
+    const endpoint = this.normalizeUrl(AppState.apiEndpoint);
+    if (endpoint) {
       try {
-        const url = `${AppState.apiEndpoint}?action=searchTracking&query=${encodeURIComponent(query)}`;
-        const res = await this.fetchWithTimeout(url, {}, 8000);
+        const url = `${endpoint}?action=searchTracking&query=${encodeURIComponent(query)}&_t=${Date.now()}`;
+        const res = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
         return await res.json();
       } catch (err) {
         console.warn('API lookup failed, fallback to local search:', err);
@@ -432,18 +469,19 @@ const ApiClient = {
     }
 
     // ส่งข้อมูลไปยัง Google Apps Script Backend
-    if (AppState.apiEndpoint) {
+    const endpoint = this.normalizeUrl(AppState.apiEndpoint);
+    if (endpoint) {
       try {
-        const res = await this.fetchWithTimeout(AppState.apiEndpoint, {
+        const res = await this.fetchWithTimeout(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // ใช้ text/plain เพื่อเลี่ยง CORS Preflight Options request
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'updateInspection',
             ...payload
           })
-        }, 30000); // 30s timeout สำหรับอัปโหลดภาพ/วิดีโอ
+        }, 45000); // 45s timeout สำหรับอัปโหลดภาพ/วิดีโอ
         
-        return await res.json();
+        return await this.safeJsonParse(res);
       } catch (err) {
         console.error('Failed to sync inspection to Google Sheet:', err);
         return {
@@ -461,8 +499,24 @@ const ApiClient = {
     };
   },
 
+  async safeJsonParse(res) {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('<HTML')) {
+        if (res.status === 404 || text.includes('not found') || text.includes('Not Found')) {
+          throw new Error('ไม่พบ Web App URL (HTTP 404) กรุณาตรวจสอบว่า Web App URL ในหน้าตั้งค่าถูกต้องและลงท้ายด้วย /exec');
+        }
+        throw new Error('Google ส่งกลับหน้าเว็บ HTML แทน JSON กรุณาตรวจสอบว่าใน Apps Script ได้เลือก Who has access: Anyone (ทุกคน) หรือยัง');
+      }
+      throw new Error('ข้อมูลตอบกลับผิดพลาด: ' + (text.length > 100 ? text.substring(0, 100) + '...' : text));
+    }
+  },
+
   async bulkUpsertOrders(orders, onProgress = null) {
-    if (!AppState.apiEndpoint) {
+    const endpoint = this.normalizeUrl(AppState.apiEndpoint);
+    if (!endpoint) {
       // บันทึกลง LocalStorage
       AppState.orders = orders;
       localStorage.setItem('tiktok_return_orders_cache', JSON.stringify(orders));
@@ -472,8 +526,8 @@ const ApiClient = {
       };
     }
 
-    // แบ่ง Chunk ละ 100 รายการเพื่อความเสถียรของ Apps Script
-    const chunkSize = 100;
+    // แบ่ง Chunk ละ 250 รายการเพื่อความรวดเร็วและเสถียรภาพสูงสุด
+    const chunkSize = 250;
     const totalChunks = Math.ceil(orders.length / chunkSize);
     let totalInserted = 0;
     let totalUpdated = 0;
@@ -484,7 +538,7 @@ const ApiClient = {
         onProgress(Math.round(((i + 1) / totalChunks) * 100), i + 1, totalChunks);
       }
 
-      const res = await this.fetchWithTimeout(AppState.apiEndpoint, {
+      const res = await this.fetchWithTimeout(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
@@ -493,7 +547,7 @@ const ApiClient = {
         })
       }, 45000);
 
-      const result = await res.json();
+      const result = await this.safeJsonParse(res);
       if (!result.success) {
         throw new Error(result.error || 'การส่งข้อมูลขัดข้อง');
       }
@@ -514,7 +568,8 @@ const ApiClient = {
   },
 
   async loadAllOrdersFromSheet() {
-    if (!AppState.apiEndpoint) {
+    const endpoint = this.normalizeUrl(AppState.apiEndpoint);
+    if (!endpoint) {
       const cached = localStorage.getItem('tiktok_return_orders_cache');
       if (cached) {
         AppState.orders = JSON.parse(cached);
@@ -523,9 +578,9 @@ const ApiClient = {
     }
 
     try {
-      const url = `${AppState.apiEndpoint}?action=getOrders&limit=2000`;
-      const res = await this.fetchWithTimeout(url, {}, 20000);
-      const data = await res.json();
+      const url = `${endpoint}?action=getOrders&limit=2000&_t=${Date.now()}`;
+      const res = await this.fetchWithTimeout(url, { method: 'GET' }, 20000);
+      const data = await this.safeJsonParse(res);
       if (data.success) {
         AppState.orders = data.orders || [];
         localStorage.setItem('tiktok_return_orders_cache', JSON.stringify(AppState.orders));
@@ -1362,50 +1417,54 @@ async function uploadImportedToGoogleSheet() {
 // ==========================================
 
 function saveSettings() {
-  const urlInput = document.getElementById('setting-api-url').value.trim();
   const staffInput = document.getElementById('setting-staff-name').value.trim();
-
-  AppState.apiEndpoint = urlInput;
   AppState.staffName = staffInput || 'พนักงานคลัง 1';
-
-  localStorage.setItem('tiktok_return_api_url', urlInput);
   localStorage.setItem('tiktok_return_staff_name', AppState.staffName);
 
   Swal.fire({
     icon: 'success',
-    title: 'บันทึกการตั้งค่าแล้ว',
+    title: 'บันทึกชื่อพนักงานแล้ว',
     timer: 1500,
     showConfirmButton: false
   });
 }
 
 async function testApiConnection() {
-  const url = document.getElementById('setting-api-url').value.trim();
-  if (!url) {
-    Swal.fire('กรุณาระบุ Web App URL', '', 'warning');
-    return;
-  }
+  const url = DEFAULT_API_ENDPOINT;
+  AppState.apiEndpoint = url;
 
   Swal.fire({
     title: 'กำลังทดสอบการเชื่อมต่อ...',
+    text: 'กำลังส่งคำขอไปยัง Google Apps Script',
     allowOutsideClick: false,
     didOpen: () => Swal.showLoading()
   });
 
-  AppState.apiEndpoint = url;
   const res = await ApiClient.ping();
 
   if (res.success) {
     Swal.fire({
       icon: 'success',
-      title: 'เชื่อมต่อสำเร็จ!',
-      text: 'ระบบ Apps Script พร้อมใช้งานเรียบร้อย'
+      title: 'เชื่อมต่อสำเร็จ! 🎉',
+      text: 'ระบบ Google Apps Script และ Google Sheets พร้อมใช้งานเรียบร้อยแล้ว'
     });
   } else {
     Swal.fire({
       icon: 'error',
       title: 'เชื่อมต่อไม่สำเร็จ',
-      text: res.error || 'กรุณาตรวจสอบว่าได้เลือก Who has access: Anyone แล้วหรือไม่'
+      html: `
+        <div class="text-left text-xs sm:text-sm space-y-2 text-slate-700">
+          <p class="font-bold text-rose-600">${res.error || 'ไม่สามารถติดต่อ Apps Script ได้'}</p>
+          <div class="p-3 bg-amber-50 rounded-lg border border-amber-200 mt-2 text-xs">
+            <b>คำแนะนำในการแก้ไข:</b>
+            <ol class="list-decimal pl-4 mt-1 space-y-1 text-slate-600">
+              <li>ตรวจสอบว่า Web App URL ลงท้ายด้วย <code>/exec</code> หรือไม่</li>
+              <li>ในหน้า Apps Script ให้กด <b>Deploy > Manage deployments</b> แล้วตรวจสอบว่าเลือก <b>Who has access: Anyone</b> (ทุกคน)</li>
+              <li>หากเพิ่งสร้าง Deployment ใหม่ ครั้งแรก Google อาจใช้เวลา 10-15 วินาทีในการเริ่มต้นระบบ (Cold Start) ลองกดทดสอบใหม่อีกครั้ง</li>
+            </ol>
+          </div>
+        </div>
+      `
     });
   }
 }
@@ -1435,10 +1494,9 @@ async function syncSheetCache() {
 
 // Setup Event Listeners on DOM Ready
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load saved settings
-  if (document.getElementById('setting-api-url')) {
-    document.getElementById('setting-api-url').value = AppState.apiEndpoint;
-  }
+  // Always use pre-configured URL
+  AppState.apiEndpoint = DEFAULT_API_ENDPOINT;
+
   if (document.getElementById('setting-staff-name')) {
     document.getElementById('setting-staff-name').value = AppState.staffName;
   }
