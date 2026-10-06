@@ -280,6 +280,15 @@ function getDriveViewUrl(url) {
   return url;
 }
 
+function getDrivePreviewUrl(url) {
+  if (!url) return '';
+  const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/preview`;
+  }
+  return url;
+}
+
 // ==========================================
 // 4. ORDER DETAIL MODAL
 // ==========================================
@@ -290,24 +299,41 @@ function viewDetails(orderId) {
   const modal = document.getElementById('order-modal');
   modal.classList.remove('hidden');
 
-  document.getElementById('modal-tracking-id').innerText = order.trackingId || '-';
+  document.getElementById('modal-tracking-id').innerText = order.trackingId || order.orderId;
+  document.getElementById('modal-tracking-info').innerText = order.trackingId || '-';
   document.getElementById('modal-order-id').innerText = order.orderId;
-  document.getElementById('modal-status').innerText = order.checkStatus || 'ยังไม่ตรวจ';
-  document.getElementById('modal-carrier').innerText = order.carrier || '-';
-  document.getElementById('modal-reason').innerText = order.returnReason || '-';
-  document.getElementById('modal-staff').innerText = order.checkedBy ? `${order.checkedBy} (${order.checkedAt || '-'})` : '-';
-  document.getElementById('modal-note').innerText = order.staffNote || '-';
+  
+  const statusEl = document.getElementById('modal-status');
+  statusEl.innerText = order.checkStatus || 'ยังไม่ตรวจ';
+  statusEl.className = (order.checkStatus && order.checkStatus.includes('ครบ')) ? 'font-bold text-emerald-600' :
+                       (!order.checkStatus || order.checkStatus === 'ยังไม่ตรวจ' ? 'font-bold text-amber-600' : 'font-bold text-rose-600');
 
+  document.getElementById('modal-checked-at').innerText = order.checkedAt || '-';
+  document.getElementById('modal-total-qty').innerText = `${order.totalQuantity || 1} ชิ้น`;
+
+  // Display only Seller SKU and Quantity
   const itemsContainer = document.getElementById('modal-items-list');
-  itemsContainer.innerHTML = (order.items || []).map(it => `
-    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-sm flex items-center justify-between">
-      <div>
-        <span class="font-bold text-blue-600">[${it.sku}]</span> ${it.productName || ''}
+  const items = order.items || [];
+  if (items.length === 0) {
+    itemsContainer.innerHTML = `
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
+        <span class="font-bold text-blue-600">[${order.sellerSku || 'SKU'}]</span>
+        <span class="font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border shadow-sm">จำนวน: ${order.totalQuantity || 1}</span>
       </div>
-      <span class="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border">x${it.quantity}</span>
-    </div>
-  `).join('');
+    `;
+  } else {
+    itemsContainer.innerHTML = items.map(it => `
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
+        <div>
+          <span class="font-bold text-blue-600 text-sm">[${it.sku || order.sellerSku || 'SKU'}]</span>
+          ${it.variation ? `<span class="text-slate-500 ml-1 font-normal">(${it.variation})</span>` : ''}
+        </div>
+        <span class="font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border shadow-sm">จำนวน: ${it.quantity || 1}</span>
+      </div>
+    `).join('');
+  }
 
+  // Photo
   const photoEl = document.getElementById('modal-photo');
   const noPhotoEl = document.getElementById('modal-no-photo');
   if (order.photoUrl) {
@@ -323,20 +349,39 @@ function viewDetails(orderId) {
     noPhotoEl.classList.remove('hidden');
   }
 
+  // Video: Use iframe for Drive preview or video tag for direct/blob
+  const videoIframe = document.getElementById('modal-video-iframe');
   const videoEl = document.getElementById('modal-video');
   const noVideoEl = document.getElementById('modal-no-video');
+
   if (order.videoUrl) {
-    videoEl.src = order.videoUrl;
-    videoEl.classList.remove('hidden');
+    const isDrive = order.videoUrl.includes('drive.google.com') || order.videoUrl.includes('drive.usercontent.google.com');
+    if (isDrive) {
+      videoIframe.src = getDrivePreviewUrl(order.videoUrl);
+      videoIframe.classList.remove('hidden');
+      videoEl.classList.add('hidden');
+    } else {
+      videoEl.src = order.videoUrl;
+      videoEl.classList.remove('hidden');
+      videoIframe.classList.add('hidden');
+    }
     noVideoEl.classList.add('hidden');
   } else {
+    if (videoIframe) videoIframe.src = '';
+    if (videoEl) videoEl.src = '';
+    videoIframe.classList.add('hidden');
     videoEl.classList.add('hidden');
     noVideoEl.classList.remove('hidden');
   }
 }
 
 function closeModal() {
-  document.getElementById('order-modal').classList.add('hidden');
+  const modal = document.getElementById('order-modal');
+  modal.classList.add('hidden');
+  const videoIframe = document.getElementById('modal-video-iframe');
+  const videoEl = document.getElementById('modal-video');
+  if (videoIframe) videoIframe.src = '';
+  if (videoEl) videoEl.src = '';
 }
 
 // ==========================================
