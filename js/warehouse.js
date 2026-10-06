@@ -220,12 +220,24 @@ async function syncDataFromSheet(showToast = false) {
 }
 
 // ==========================================
-// 5. ULTRA-FAST HARDWARE SCANNER ENGINE (60 FPS & TORCH)
+// 5. ULTRA-FAST SCANNER ENGINE (ANDROID HARDWARE + IPHONE IOS COMPATIBLE)
 // ==========================================
 let nativeDetector = null;
 let scanStream = null;
 let scanAnimationId = null;
 let isTorchActive = false;
+
+async function checkNativeBarcodeSupport() {
+  if (!('BarcodeDetector' in window) || typeof BarcodeDetector.getSupportedFormats !== 'function') {
+    return false;
+  }
+  try {
+    const formats = await BarcodeDetector.getSupportedFormats();
+    return Array.isArray(formats) && formats.includes('code_128');
+  } catch (e) {
+    return false;
+  }
+}
 
 async function startScanner() {
   const modal = document.getElementById('scanner-modal');
@@ -235,10 +247,10 @@ async function startScanner() {
   const videoEl = document.getElementById('scanner-video');
   const readerEl = document.getElementById('reader');
 
-  // 1. Check if Native BarcodeDetector is available (Android Chrome & modern Safari)
-  const hasNativeBarcode = ('BarcodeDetector' in window);
+  // 1. Check if Native BarcodeDetector is available & supports 1D Code 128 (Android Chrome)
+  const isNativeSupported = await checkNativeBarcodeSupport();
 
-  if (hasNativeBarcode) {
+  if (isNativeSupported) {
     try {
       if (!nativeDetector) {
         nativeDetector = new BarcodeDetector({
@@ -255,8 +267,7 @@ async function startScanner() {
         video: {
           facingMode: { ideal: "environment" },
           width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
-          focusMode: "continuous"
+          height: { ideal: 1080, min: 720 }
         },
         audio: false
       };
@@ -273,27 +284,28 @@ async function startScanner() {
     }
   }
 
-  // 2. Fallback: Html5Qrcode with Optimized Settings
+  // 2. Engine for iPhone (iOS Safari) & fallback browsers (Html5Qrcode / ZXing optimized for iOS)
   if (videoEl) videoEl.classList.add('hidden');
   if (readerEl) readerEl.classList.remove('hidden');
 
   try {
     if (!State.html5QrCode) {
       State.html5QrCode = new Html5Qrcode("reader", {
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
         verbose: false
       });
     }
 
     const config = {
-      fps: 30,
-      qrbox: (w, h) => ({ width: Math.floor(w * 0.95), height: Math.floor(Math.max(160, h * 0.55)) }),
+      fps: 25,
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        const width = Math.floor(viewfinderWidth * 0.92);
+        const height = Math.floor(Math.max(150, viewfinderHeight * 0.5));
+        return { width: width, height: height };
+      },
       aspectRatio: 1.333334,
       videoConstraints: {
-        facingMode: "environment",
-        focusMode: "continuous",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        facingMode: "environment"
       },
       formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128,
@@ -310,9 +322,19 @@ async function startScanner() {
 
     State.html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
       onScanSuccess(decodedText);
+    }).catch(async (err) => {
+      console.warn('Html5Qrcode facingMode start failed, trying device list:', err);
+      const devices = await Html5Qrcode.getCameras();
+      if (devices && devices.length > 0) {
+        let backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment'));
+        let camId = backCam ? backCam.id : devices[0].id;
+        State.html5QrCode.start(camId, config, (decodedText) => {
+          onScanSuccess(decodedText);
+        });
+      }
     });
   } catch (err) {
-    Swal.fire('เปิดกล้องไม่สำเร็จ', 'กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์', 'error');
+    Swal.fire('เปิดกล้องไม่สำเร็จ', 'กรุณาอนุญาตการใช้งานกล้องใน Safari (การตั้งค่า ➔ Safari ➔ กล้อง)', 'error');
     stopScanner();
   }
 }
