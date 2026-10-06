@@ -457,8 +457,26 @@ function onScanSuccess(barcode) {
   handleSearch(barcode);
 }
 
+function getDriveThumbnailUrl(url, size = 'w800') {
+  if (!url) return '';
+  const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=${size}`;
+  }
+  return url;
+}
+
+function getDriveViewUrl(url) {
+  if (!url) return '';
+  const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/view?usp=sharing`;
+  }
+  return url;
+}
+
 // ==========================================
-// 6. SEARCH & DISPLAY INSPECTION
+// 6. SEARCH & DISPLAY INSPECTION (WITH DUPLICATE BLOCK)
 // ==========================================
 async function handleSearch(query) {
   if (!query) return;
@@ -492,8 +510,54 @@ async function handleSearch(query) {
     }
   }
 
-  // 3. เมื่อเจอในระบบ ให้เปิดหน้าตรวจเช็ค
+  // 3. เมื่อเจอในระบบ
   if (foundOrder) {
+    // ป้องกันการสแกนซ้ำ: พัสดุไหนที่ตรวจสอบแล้ว ไม่สามารถสแกนซ้ำได้
+    const status = String(foundOrder.checkStatus || '').trim();
+    if (status && status !== 'ยังไม่ตรวจ') {
+      playBeep('warning');
+      triggerHaptic(150);
+
+      Swal.fire({
+        icon: 'warning',
+        title: '⚠️ พัสดุนี้ตรวจเช็คไปแล้ว',
+        html: `
+          <div class="text-left text-sm space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 mt-2">
+            <div class="flex justify-between">
+              <span class="text-slate-500">เลขพัสดุ:</span>
+              <span class="font-mono font-bold text-slate-800">${foundOrder.trackingId || foundOrder.orderId}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">สถานะ:</span>
+              <span class="font-bold ${status.includes('ครบ') ? 'text-emerald-600' : 'text-rose-600'}">${status}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">ตรวจเมื่อ:</span>
+              <span class="text-slate-700">${foundOrder.checkedAt || '-'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">ผู้ตรวจ:</span>
+              <span class="text-slate-700 font-medium">${foundOrder.checkedBy || 'พนักงานคลัง'}</span>
+            </div>
+            ${foundOrder.staffNote ? `
+            <div class="mt-1 pt-1 border-t text-xs text-slate-600">
+              <b>หมายเหตุ:</b> ${foundOrder.staffNote}
+            </div>` : ''}
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '🔍 ดูรายละเอียดการตรวจ',
+        cancelButtonText: 'ปิด',
+        confirmButtonColor: '#2563EB'
+      }).then(res => {
+        if (res.isConfirmed) {
+          openStaffDetailModal(foundOrder);
+        }
+      });
+      return;
+    }
+
+    // หากยังไม่ตรวจ -> เข้าสู่หน้าตรวจเช็ค SKU
     playBeep('success');
     triggerHaptic(80);
     displayInspectionForm(foundOrder);
@@ -683,6 +747,8 @@ async function saveInspectionResult() {
     didOpen: () => Swal.showLoading()
   });
 
+  const nowThai = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
+
   const payload = {
     action: 'updateInspection',
     orderId: order.orderId,
@@ -706,17 +772,10 @@ async function saveInspectionResult() {
     if (idx !== -1) {
       State.orders[idx].checkStatus = finalStatus;
       State.orders[idx].staffNote = note;
+      State.orders[idx].checkedBy = 'พนักงานคลัง';
+      State.orders[idx].checkedAt = nowThai;
     }
-
-    const record = {
-      trackingId: order.trackingId || order.orderId,
-      sellerSku: order.sellerSku || (order.items && order.items[0] ? order.items[0].sku : 'SKU'),
-      status: finalStatus,
-      time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-    };
-    State.recentHistory.unshift(record);
-    if (State.recentHistory.length > 50) State.recentHistory.pop();
-    localStorage.setItem('wh_recent_history', JSON.stringify(State.recentHistory));
+    localStorage.setItem('wh_cached_orders', JSON.stringify(State.orders));
 
     playBeep('success');
     triggerHaptic(100);
@@ -737,44 +796,211 @@ async function saveInspectionResult() {
 }
 
 // ==========================================
-// 8. STAFF HISTORY & DASHBOARD
+// 8. STAFF HISTORY & DASHBOARD (SYNC WITH DATABASE)
 // ==========================================
+let staffFilter = 'ALL';
+
+function setStaffFilter(status) {
+  staffFilter = status;
+  
+  // Highlight active card
+  const cards = {
+    'ALL': 'card-filter-all',
+    'COMPLETED': 'card-filter-completed',
+    'ISSUES': 'card-filter-issues',
+    'PENDING': 'card-filter-pending'
+  };
+
+  Object.entries(cards).forEach(([st, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (st === status) {
+      el.className = 'bg-white p-4 rounded-2xl border-2 border-blue-500 shadow-md text-center cursor-pointer active:scale-95 transition-all ring-2 ring-blue-100';
+    } else {
+      el.className = 'bg-white p-4 rounded-2xl border-2 border-transparent hover:border-slate-300 shadow-sm text-center cursor-pointer active:scale-95 transition-all';
+    }
+  });
+
+  renderStaffHistory();
+}
+
 function renderStaffHistory() {
   const listEl = document.getElementById('staff-history-list');
   const countEl = document.getElementById('staff-history-count');
-  const todayEl = document.getElementById('staff-stat-today');
+  const totalEl = document.getElementById('staff-stat-total');
+  const completedEl = document.getElementById('staff-stat-completed');
   const issuesEl = document.getElementById('staff-stat-issues');
+  const pendingEl = document.getElementById('staff-stat-pending');
 
   if (!listEl) return;
 
-  const history = State.recentHistory;
-  countEl.innerText = `${history.length} รายการ`;
+  const orders = State.orders || [];
+  const q = (document.getElementById('staff-search-input')?.value || '').trim().toLowerCase();
 
-  let todayCount = history.length;
-  let issuesCount = history.filter(h => h.status !== 'ครบถ้วน').length;
+  // 1. Calculate Real Stats Counters
+  let total = orders.length;
+  let completed = 0;
+  let issues = 0;
+  let pending = 0;
 
-  todayEl.innerText = todayCount;
-  issuesEl.innerText = issuesCount;
+  orders.forEach(o => {
+    const s = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
+    if (!s || s === 'ยังไม่ตรวจ') {
+      pending++;
+    } else if (s.includes('ครบ')) {
+      completed++;
+    } else {
+      issues++;
+    }
+  });
 
-  if (history.length === 0) {
-    listEl.innerHTML = '<div class="text-xs text-slate-400 py-6 text-center">ยังไม่มีประวัติการสแกนในวันนี้</div>';
+  if (totalEl) totalEl.innerText = total.toLocaleString();
+  if (completedEl) completedEl.innerText = completed.toLocaleString();
+  if (issuesEl) issuesEl.innerText = issues.toLocaleString();
+  if (pendingEl) pendingEl.innerText = pending.toLocaleString();
+
+  // 2. Filter Orders
+  const filtered = orders.filter(o => {
+    const s = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
+    if (staffFilter === 'COMPLETED' && !s.includes('ครบ')) return false;
+    if (staffFilter === 'ISSUES' && (s === 'ยังไม่ตรวจ' || !s || s.includes('ครบ'))) return false;
+    if (staffFilter === 'PENDING' && s !== 'ยังไม่ตรวจ' && s !== '') return false;
+
+    if (q) {
+      const match = (o.orderId && o.orderId.toLowerCase().includes(q)) ||
+                    (o.trackingId && o.trackingId.toLowerCase().includes(q)) ||
+                    (o.sellerSku && o.sellerSku.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  countEl.innerText = `${filtered.length.toLocaleString()} รายการ`;
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div class="text-sm text-slate-400 py-8 text-center">ไม่พบรายการพัสดุที่ตรงกับเงื่อนไข</div>';
     return;
   }
 
-  listEl.innerHTML = history.slice(0, 15).map(h => `
-    <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-sm">
-      <div class="min-w-0">
-        <div class="font-mono font-bold text-slate-900 text-sm break-all">${h.trackingId}</div>
-        <div class="text-slate-600 font-medium text-xs truncate mt-0.5">${h.sellerSku}</div>
+  listEl.innerHTML = filtered.slice(0, 40).map(o => {
+    const st = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
+    const isCompleted = st.includes('ครบ');
+    const isPending = !st || st === 'ยังไม่ตรวจ';
+    const badgeColor = isPending ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                       isCompleted ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                       'bg-rose-100 text-rose-800 border-rose-200';
+
+    const safeOrderJson = encodeURIComponent(JSON.stringify(o));
+
+    return `
+      <div onclick="openStaffModalByData('${safeOrderJson}')" class="p-4 bg-slate-50 hover:bg-blue-50/50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-sm cursor-pointer active:scale-95 transition-all shadow-sm">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="font-mono font-black text-slate-900 text-base break-all">${o.trackingId || o.orderId}</span>
+          </div>
+          <div class="text-slate-600 font-semibold text-xs truncate mt-1">
+            ${o.sellerSku || (o.items && o.items[0] ? o.items[0].sku : 'SKU')} 
+            <span class="text-blue-600 font-bold ml-1">(จำนวน: ${o.totalQuantity || 1})</span>
+          </div>
+          ${o.checkedAt ? `<div class="text-[11px] text-slate-400 mt-0.5">ตรวจเมื่อ: ${o.checkedAt}</div>` : ''}
+        </div>
+        <div class="text-right flex-shrink-0 flex flex-col items-end gap-1">
+          <span class="inline-block px-3 py-1 rounded-xl font-black text-xs border ${badgeColor}">
+            ${st}
+          </span>
+          <span class="text-[11px] text-blue-600 font-bold flex items-center gap-0.5">
+            ดูรายละเอียด ➔
+          </span>
+        </div>
       </div>
-      <div class="text-right flex-shrink-0">
-        <span class="inline-block px-2.5 py-1 rounded-lg font-bold text-xs ${h.status === 'ครบถ้วน' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'}">
-          ${h.status}
-        </span>
-        <div class="text-xs text-slate-400 font-medium mt-0.5">${h.time}</div>
+    `;
+  }).join('');
+}
+
+function openStaffModalByData(encodedData) {
+  try {
+    const order = JSON.parse(decodeURIComponent(encodedData));
+    openStaffDetailModal(order);
+  } catch(e) {
+    console.error('Failed to open modal:', e);
+  }
+}
+
+function openStaffDetailModal(order) {
+  if (!order) return;
+  const modal = document.getElementById('staff-detail-modal');
+  if (!modal) return;
+
+  document.getElementById('staff-modal-tracking').innerText = order.trackingId || order.orderId || '-';
+  document.getElementById('staff-modal-order-id').innerText = order.orderId || '-';
+  
+  const statusEl = document.getElementById('staff-modal-status');
+  const st = order.checkStatus || 'ยังไม่ตรวจ';
+  statusEl.innerText = st;
+  statusEl.className = st.includes('ครบ') ? 'font-bold text-emerald-600' :
+                       (st === 'ยังไม่ตรวจ' ? 'font-bold text-amber-600' : 'font-bold text-rose-600');
+
+  document.getElementById('staff-modal-inspector').innerText = order.checkedBy 
+    ? `${order.checkedBy} (${order.checkedAt || '-'})` 
+    : (order.checkedAt || 'ยังไม่ได้ตรวจ');
+
+  document.getElementById('staff-modal-carrier').innerText = order.carrier || '-';
+  document.getElementById('staff-modal-reason').innerText = order.returnReason || '-';
+  document.getElementById('staff-modal-note').innerText = order.staffNote || 'ไม่มีหมายเหตุ';
+
+  // Items
+  const itemsContainer = document.getElementById('staff-modal-items');
+  const items = order.items || [];
+  if (items.length === 0) {
+    itemsContainer.innerHTML = `<div class="p-3 bg-slate-50 rounded-xl text-xs font-bold text-slate-700 border">${order.sellerSku || 'SKU'} x ${order.totalQuantity || 1}</div>`;
+  } else {
+    itemsContainer.innerHTML = items.map(it => `
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
+        <div>
+          <span class="font-black text-blue-600 text-sm">[${it.sku || 'SKU'}]</span>
+          ${it.productName ? `<span class="text-slate-700 ml-1 font-medium">${it.productName}</span>` : ''}
+          ${it.variation ? `<div class="text-[11px] text-slate-400 mt-0.5">${it.variation}</div>` : ''}
+        </div>
+        <span class="font-black text-slate-800 bg-white px-2.5 py-1 rounded-lg border shadow-sm">x${it.quantity || 1}</span>
       </div>
-    </div>
-  `).join('');
+    `).join('');
+  }
+
+  // Photo Preview
+  const photoImg = document.getElementById('staff-modal-photo-img');
+  const noPhoto = document.getElementById('staff-modal-no-photo');
+  if (order.photoUrl) {
+    const thumbUrl = getDriveThumbnailUrl(order.photoUrl, 'w800');
+    photoImg.src = thumbUrl;
+    photoImg.onclick = () => window.open(getDriveViewUrl(order.photoUrl), '_blank');
+    photoImg.title = "กดเพื่อดูรูปขนาดเต็ม";
+    photoImg.classList.remove('hidden');
+    noPhoto.classList.add('hidden');
+  } else {
+    photoImg.classList.add('hidden');
+    noPhoto.classList.remove('hidden');
+  }
+
+  // Video Preview
+  const videoPlayer = document.getElementById('staff-modal-video-player');
+  const noVideo = document.getElementById('staff-modal-no-video');
+  if (order.videoUrl) {
+    videoPlayer.src = order.videoUrl;
+    videoPlayer.classList.remove('hidden');
+    noVideo.classList.add('hidden');
+  } else {
+    videoPlayer.classList.add('hidden');
+    noVideo.classList.remove('hidden');
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeStaffModal() {
+  const modal = document.getElementById('staff-detail-modal');
+  if (modal) modal.classList.add('hidden');
+  const videoPlayer = document.getElementById('staff-modal-video-player');
+  if (videoPlayer) videoPlayer.pause();
 }
 
 function switchView(viewName) {
