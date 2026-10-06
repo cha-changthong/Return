@@ -254,6 +254,32 @@ function changePage(delta) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function setAdminFilter(status) {
+  const select = document.getElementById('admin-status-filter');
+  if (select) {
+    select.value = status;
+    applyFilters();
+  }
+}
+
+function getDriveThumbnailUrl(url, size = 'w800') {
+  if (!url) return '';
+  const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=${size}`;
+  }
+  return url;
+}
+
+function getDriveViewUrl(url) {
+  if (!url) return '';
+  const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/view?usp=sharing`;
+  }
+  return url;
+}
+
 // ==========================================
 // 4. ORDER DETAIL MODAL
 // ==========================================
@@ -285,8 +311,12 @@ function viewDetails(orderId) {
   const photoEl = document.getElementById('modal-photo');
   const noPhotoEl = document.getElementById('modal-no-photo');
   if (order.photoUrl) {
-    photoEl.src = order.photoUrl;
+    const thumbUrl = getDriveThumbnailUrl(order.photoUrl, 'w1000');
+    photoEl.src = thumbUrl;
+    photoEl.onclick = () => window.open(getDriveViewUrl(order.photoUrl), '_blank');
+    photoEl.title = "คลิกเพื่อดูรูปขนาดเต็ม";
     photoEl.classList.remove('hidden');
+    photoEl.classList.add('cursor-pointer', 'hover:opacity-90', 'transition-opacity');
     noPhotoEl.classList.add('hidden');
   } else {
     photoEl.classList.add('hidden');
@@ -458,14 +488,17 @@ async function processSelectedFiles() {
       }
     }
 
-    // Format Aggregated List
-    const merged = [];
+    // Format Aggregated List & Deduplicate Against Existing Database
+    const existingOrderIds = new Set(AdminState.orders.map(o => String(o.orderId || '').trim()));
+    const newOrders = [];
+    let duplicateCount = 0;
+
     ordersMap.forEach((data, orderId) => {
       const skusSummary = data.items.map(it => `${it.sku || 'N/A'} (x${it.quantity})`).join(', ');
       const productSummary = data.items.map(it => `${it.productName || 'สินค้า'} x ${it.quantity}`).join(' | ');
       const totalQty = data.items.reduce((s, it) => s + it.quantity, 0);
 
-      merged.push({
+      const record = {
         orderId,
         trackingId: data.trackingId || '',
         sellerSku: skusSummary,
@@ -479,19 +512,37 @@ async function processSelectedFiles() {
         buyerUsername: data.buyerUsername,
         checkStatus: data.checkStatus,
         staffNote: '', checkedBy: '', checkedAt: '', photoUrl: '', videoUrl: ''
-      });
+      };
+
+      if (existingOrderIds.has(String(orderId).trim())) {
+        duplicateCount++;
+      } else {
+        newOrders.push(record);
+      }
     });
 
-    AdminState.importedOrders = merged;
+    AdminState.importedOrders = newOrders;
     Swal.close();
+
+    if (newOrders.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'ไม่มีข้อมูลใหม่',
+        text: `คำสั่งซื้อทั้งหมด ${ordersMap.size} รายการ มีอยู่ในระบบแล้ว (ระบบข้ามข้อมูลซ้ำทั้งหมด)`
+      });
+      return;
+    }
 
     // Render Preview
     document.getElementById('import-preview-section').classList.remove('hidden');
-    document.getElementById('import-preview-count').innerText = `${merged.length.toLocaleString()} ออเดอร์`;
+    document.getElementById('import-preview-count').innerHTML = `
+      <span class="text-emerald-600 font-bold">${newOrders.length.toLocaleString()} รายการใหม่</span>
+      ${duplicateCount > 0 ? `<span class="text-slate-400 font-normal text-xs ml-2">(มีอยู่แล้วในระบบ ${duplicateCount} รายการ - จะถูกข้าม)</span>` : ''}
+    `;
 
-    document.getElementById('import-preview-tbody').innerHTML = merged.slice(0, 10).map(o => `
+    document.getElementById('import-preview-tbody').innerHTML = newOrders.slice(0, 10).map(o => `
       <tr class="border-b border-slate-100 text-xs">
-        <td class="py-2 px-3 font-mono font-bold">${o.trackingId || '-'}</td>
+        <td class="py-2 px-3 font-mono font-bold text-slate-800">${o.trackingId || '-'}</td>
         <td class="py-2 px-3 font-mono">${o.orderId}</td>
         <td class="py-2 px-3 font-medium">${o.sellerSku || '-'}</td>
         <td class="py-2 px-3 truncate max-w-xs">${o.productSummary || '-'}</td>
