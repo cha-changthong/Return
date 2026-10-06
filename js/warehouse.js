@@ -917,6 +917,15 @@ function renderStaffHistory() {
   }).join('');
 }
 
+function getDrivePreviewUrl(url) {
+  if (!url) return '';
+  const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/preview`;
+  }
+  return url;
+}
+
 function openStaffModalByData(encodedData) {
   try {
     const order = JSON.parse(decodeURIComponent(encodedData));
@@ -932,6 +941,7 @@ function openStaffDetailModal(order) {
   if (!modal) return;
 
   document.getElementById('staff-modal-tracking').innerText = order.trackingId || order.orderId || '-';
+  document.getElementById('staff-modal-tracking-id').innerText = order.trackingId || '-';
   document.getElementById('staff-modal-order-id').innerText = order.orderId || '-';
   
   const statusEl = document.getElementById('staff-modal-status');
@@ -940,28 +950,27 @@ function openStaffDetailModal(order) {
   statusEl.className = st.includes('ครบ') ? 'font-bold text-emerald-600' :
                        (st === 'ยังไม่ตรวจ' ? 'font-bold text-amber-600' : 'font-bold text-rose-600');
 
-  document.getElementById('staff-modal-inspector').innerText = order.checkedBy 
-    ? `${order.checkedBy} (${order.checkedAt || '-'})` 
-    : (order.checkedAt || 'ยังไม่ได้ตรวจ');
+  document.getElementById('staff-modal-time').innerText = order.checkedAt || '-';
+  document.getElementById('staff-modal-total-qty').innerText = `${order.totalQuantity || 1} ชิ้น`;
 
-  document.getElementById('staff-modal-carrier').innerText = order.carrier || '-';
-  document.getElementById('staff-modal-reason').innerText = order.returnReason || '-';
-  document.getElementById('staff-modal-note').innerText = order.staffNote || 'ไม่มีหมายเหตุ';
-
-  // Items
+  // Display only Seller SKU and Quantity
   const itemsContainer = document.getElementById('staff-modal-items');
   const items = order.items || [];
   if (items.length === 0) {
-    itemsContainer.innerHTML = `<div class="p-3 bg-slate-50 rounded-xl text-xs font-bold text-slate-700 border">${order.sellerSku || 'SKU'} x ${order.totalQuantity || 1}</div>`;
+    itemsContainer.innerHTML = `
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
+        <span class="font-bold text-blue-600">[${order.sellerSku || 'SKU'}]</span>
+        <span class="font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border shadow-sm">จำนวน: ${order.totalQuantity || 1}</span>
+      </div>
+    `;
   } else {
     itemsContainer.innerHTML = items.map(it => `
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
         <div>
-          <span class="font-black text-blue-600 text-sm">[${it.sku || 'SKU'}]</span>
-          ${it.productName ? `<span class="text-slate-700 ml-1 font-medium">${it.productName}</span>` : ''}
-          ${it.variation ? `<div class="text-[11px] text-slate-400 mt-0.5">${it.variation}</div>` : ''}
+          <span class="font-bold text-blue-600 text-sm">[${it.sku || order.sellerSku || 'SKU'}]</span>
+          ${it.variation ? `<span class="text-slate-500 ml-1 font-normal">(${it.variation})</span>` : ''}
         </div>
-        <span class="font-black text-slate-800 bg-white px-2.5 py-1 rounded-lg border shadow-sm">x${it.quantity || 1}</span>
+        <span class="font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border shadow-sm">จำนวน: ${it.quantity || 1}</span>
       </div>
     `).join('');
   }
@@ -975,20 +984,34 @@ function openStaffDetailModal(order) {
     photoImg.onclick = () => window.open(getDriveViewUrl(order.photoUrl), '_blank');
     photoImg.title = "กดเพื่อดูรูปขนาดเต็ม";
     photoImg.classList.remove('hidden');
+    photoImg.classList.add('cursor-pointer');
     noPhoto.classList.add('hidden');
   } else {
     photoImg.classList.add('hidden');
     noPhoto.classList.remove('hidden');
   }
 
-  // Video Preview
+  // Video Preview (Iframe for Google Drive, Video player for Blob/Direct)
+  const videoIframe = document.getElementById('staff-modal-video-iframe');
   const videoPlayer = document.getElementById('staff-modal-video-player');
   const noVideo = document.getElementById('staff-modal-no-video');
+
   if (order.videoUrl) {
-    videoPlayer.src = order.videoUrl;
-    videoPlayer.classList.remove('hidden');
+    const isDrive = order.videoUrl.includes('drive.google.com') || order.videoUrl.includes('drive.usercontent.google.com');
+    if (isDrive) {
+      videoIframe.src = getDrivePreviewUrl(order.videoUrl);
+      videoIframe.classList.remove('hidden');
+      videoPlayer.classList.add('hidden');
+    } else {
+      videoPlayer.src = order.videoUrl;
+      videoPlayer.classList.remove('hidden');
+      videoIframe.classList.add('hidden');
+    }
     noVideo.classList.add('hidden');
   } else {
+    if (videoIframe) videoIframe.src = '';
+    if (videoPlayer) videoPlayer.src = '';
+    videoIframe.classList.add('hidden');
     videoPlayer.classList.add('hidden');
     noVideo.classList.remove('hidden');
   }
@@ -999,8 +1022,13 @@ function openStaffDetailModal(order) {
 function closeStaffModal() {
   const modal = document.getElementById('staff-detail-modal');
   if (modal) modal.classList.add('hidden');
+  const videoIframe = document.getElementById('staff-modal-video-iframe');
   const videoPlayer = document.getElementById('staff-modal-video-player');
-  if (videoPlayer) videoPlayer.pause();
+  if (videoIframe) videoIframe.src = '';
+  if (videoPlayer) {
+    videoPlayer.src = '';
+    try { videoPlayer.pause(); } catch(e) {}
+  }
 }
 
 function switchView(viewName) {
