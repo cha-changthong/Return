@@ -220,37 +220,80 @@ async function syncDataFromSheet(showToast = false) {
 }
 
 // ==========================================
-// 5. SCANNER & CAMERA CONTROLLER (HIGH SPEED & HARDWARE ACCELERATED)
+// 5. ULTRA-FAST HARDWARE SCANNER ENGINE (60 FPS & TORCH)
 // ==========================================
+let nativeDetector = null;
+let scanStream = null;
+let scanAnimationId = null;
+let isTorchActive = false;
+
 async function startScanner() {
   const modal = document.getElementById('scanner-modal');
   modal.classList.remove('hidden');
   State.isScanning = true;
 
+  const videoEl = document.getElementById('scanner-video');
+  const readerEl = document.getElementById('reader');
+
+  // 1. Check if Native BarcodeDetector is available (Android Chrome & modern Safari)
+  const hasNativeBarcode = ('BarcodeDetector' in window);
+
+  if (hasNativeBarcode) {
+    try {
+      if (!nativeDetector) {
+        nativeDetector = new BarcodeDetector({
+          formats: [
+            'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'itf', 'qr_code', 'upc_a', 'upc_e'
+          ]
+        });
+      }
+
+      if (videoEl) videoEl.classList.remove('hidden');
+      if (readerEl) readerEl.classList.add('hidden');
+
+      const constraints = {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          focusMode: "continuous"
+        },
+        audio: false
+      };
+
+      scanStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (videoEl) {
+        videoEl.srcObject = scanStream;
+        await videoEl.play();
+        startNativeDetectionLoop(videoEl);
+        return;
+      }
+    } catch (err) {
+      console.warn('Native stream start failed, falling back to Html5Qrcode:', err);
+    }
+  }
+
+  // 2. Fallback: Html5Qrcode with Optimized Settings
+  if (videoEl) videoEl.classList.add('hidden');
+  if (readerEl) readerEl.classList.remove('hidden');
+
   try {
     if (!State.html5QrCode) {
       State.html5QrCode = new Html5Qrcode("reader", {
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true // Native hardware acceleration (10x faster barcode scanning)
-        },
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         verbose: false
       });
     }
 
     const config = {
-      fps: 25,
-      qrbox: function(viewfinderWidth, viewfinderHeight) {
-        // Wide 1D barcode scanning box matching long shipping label barcodes
-        const width = Math.floor(viewfinderWidth * 0.92);
-        const height = Math.floor(Math.max(160, viewfinderHeight * 0.48));
-        return { width: width, height: height };
-      },
+      fps: 30,
+      qrbox: (w, h) => ({ width: Math.floor(w * 0.95), height: Math.floor(Math.max(160, h * 0.55)) }),
       aspectRatio: 1.333334,
       videoConstraints: {
         facingMode: "environment",
         focusMode: "continuous",
-        width: { ideal: 1280, min: 640 },
-        height: { ideal: 720, min: 480 }
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       },
       formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128,
@@ -267,16 +310,6 @@ async function startScanner() {
 
     State.html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
       onScanSuccess(decodedText);
-    }).catch(async (err) => {
-      console.warn('FacingMode start failed, trying devices fallback:', err);
-      const devices = await Html5Qrcode.getCameras();
-      if (devices && devices.length > 0) {
-        let backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment'));
-        let camId = backCam ? backCam.id : devices[0].id;
-        State.html5QrCode.start(camId, config, (decodedText) => {
-          onScanSuccess(decodedText);
-        });
-      }
     });
   } catch (err) {
     Swal.fire('เปิดกล้องไม่สำเร็จ', 'กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์', 'error');
@@ -284,11 +317,89 @@ async function startScanner() {
   }
 }
 
+function startNativeDetectionLoop(videoEl) {
+  let isProcessing = false;
+
+  async function detectFrame() {
+    if (!State.isScanning) return;
+
+    if (videoEl && videoEl.readyState >= 2 && !isProcessing) {
+      isProcessing = true;
+      try {
+        const barcodes = await nativeDetector.detect(videoEl);
+        if (barcodes && barcodes.length > 0) {
+          for (let b of barcodes) {
+            let val = String(b.rawValue || '').trim();
+            if (val) {
+              onScanSuccess(val);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        // Frame detect error ignored
+      } finally {
+        isProcessing = false;
+      }
+    }
+
+    if (State.isScanning) {
+      scanAnimationId = requestAnimationFrame(detectFrame);
+    }
+  }
+
+  scanAnimationId = requestAnimationFrame(detectFrame);
+}
+
+async function toggleTorch() {
+  if (!scanStream) return;
+  const track = scanStream.getVideoTracks()[0];
+  if (!track) return;
+
+  try {
+    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    if (capabilities.torch) {
+      isTorchActive = !isTorchActive;
+      await track.applyConstraints({
+        advanced: [{ torch: isTorchActive }]
+      });
+      const btn = document.getElementById('torch-btn');
+      if (btn) {
+        btn.className = isTorchActive 
+          ? 'p-2.5 bg-amber-500 text-white rounded-full shadow-lg shadow-amber-500/50 transition-all ring-2 ring-white'
+          : 'p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-full transition-all';
+      }
+      triggerHaptic(30);
+    } else {
+      Swal.fire({ toast: true, position: 'top', icon: 'info', title: 'อุปกรณ์นี้ไม่รองรับการเปิดไฟฉายผ่านเว็บ', timer: 2000, showConfirmButton: false });
+    }
+  } catch (e) {
+    console.warn('Torch error:', e);
+  }
+}
+
 function stopScanner() {
   const modal = document.getElementById('scanner-modal');
   if (modal) modal.classList.add('hidden');
   State.isScanning = false;
-  
+
+  if (scanAnimationId) {
+    cancelAnimationFrame(scanAnimationId);
+    scanAnimationId = null;
+  }
+
+  if (scanStream) {
+    scanStream.getTracks().forEach(track => track.stop());
+    scanStream = null;
+  }
+
+  const videoEl = document.getElementById('scanner-video');
+  if (videoEl) videoEl.srcObject = null;
+
+  isTorchActive = false;
+  const btn = document.getElementById('torch-btn');
+  if (btn) btn.className = 'p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-full transition-all';
+
   if (State.html5QrCode) {
     State.html5QrCode.stop().catch(() => {});
   }
@@ -310,11 +421,12 @@ async function handleSearch(query) {
   query = String(query).trim().toLowerCase();
 
   // 1. ค้นหาในแคชของเครื่องทันที (0.001 วิ)
-  let foundOrder = State.orders.find(o => 
-    (o.trackingId && o.trackingId.toLowerCase() === query) ||
-    (o.orderId && o.orderId.toLowerCase() === query) ||
-    (o.trackingId && o.trackingId.toLowerCase().includes(query))
-  );
+  let foundOrder = State.orders.find(o => {
+    const tId = String(o.trackingId || '').toLowerCase().trim();
+    const oId = String(o.orderId || '').toLowerCase().trim();
+    return (tId && (tId === query || query.includes(tId) || tId.includes(query))) ||
+           (oId && (oId === query || query.includes(oId)));
+  });
 
   // 2. ถ้าไม่เจอในแคช ให้ลองค้นหาจากระบบรวดเร็ว (4s timeout)
   if (!foundOrder) {
