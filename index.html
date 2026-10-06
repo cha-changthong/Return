@@ -27,23 +27,23 @@
   <!-- TOP HEADER -->
   <header class="sticky top-0 z-30 bg-blue-600 text-white shadow-md">
     <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
           </svg>
         </div>
         <div>
-          <h1 class="text-base font-bold leading-tight">เช็คพัสดุตีกลับ</h1>
-          <p class="text-[11px] text-blue-100 flex items-center gap-1.5" id="header-sync-status">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <h1 class="text-lg font-bold leading-tight">เช็คพัสดุตีกลับ</h1>
+          <p class="text-xs font-medium text-blue-100 flex items-center gap-1.5" id="header-sync-status">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
             พร้อมใช้งาน
           </p>
         </div>
       </div>
 
       <!-- Quick Refresh Cache Button -->
-      <button onclick="syncDataFromSheet(true)" title="รีเฟรชข้อมูลล่าสุด" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white">
+      <button onclick="syncDataFromSheet(true)" title="รีเฟรชข้อมูลล่าสุด" class="p-2.5 rounded-xl bg-white/15 hover:bg-white/25 active:scale-95 transition-all text-white">
         <svg id="sync-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
         </svg>
@@ -60,31 +60,31 @@
     <div id="view-scanner" class="space-y-4">
 
       <!-- Ready to Scan Card -->
-      <div id="scan-trigger-card" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-4">
-        <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-inner">
-          <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div id="scan-trigger-card" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-5">
+        <div class="w-20 h-20 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-inner">
+          <svg class="w-11 h-11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
           </svg>
         </div>
 
         <div>
-          <h2 class="text-xl font-bold text-slate-800">สแกนบาร์โค้ดพัสดุ</h2>
-          <p class="text-xs text-slate-500 mt-1">สแกนเลข Tracking ID หน้ากล่องพัสดุตีกลับ</p>
+          <h2 class="text-2xl font-black text-slate-800">สแกนบาร์โค้ดพัสดุ</h2>
+          <p class="text-sm font-medium text-slate-500 mt-1">สแกนเลข Tracking ID หน้ากล่องพัสดุตีกลับ</p>
         </div>
 
         <!-- Big Scan Button -->
-        <button onclick="startScanner()" class="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-3 text-lg">
-          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button onclick="startScanner()" class="w-full py-5 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-3 text-xl">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
           </svg>
-          <span>กดเพื่อเปิดกล้องสแกน</span>
+          <span>กดเปิดกล้องสแกน</span>
         </button>
 
         <!-- Manual Input Fallback -->
-        <div class="pt-3 border-t border-slate-100">
+        <div class="pt-4 border-t border-slate-100">
           <div class="flex gap-2">
-            <input type="text" id="manual-input" placeholder="หรือพิมพ์เลขพัสดุเอง..." class="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono">
-            <button onclick="handleSearch(document.getElementById('manual-input').value)" class="px-4 py-2.5 bg-slate-800 text-white font-semibold rounded-xl text-sm active:scale-95 transition-all">
+            <input type="text" id="manual-input" placeholder="หรือพิมพ์เลขพัสดุเอง..." class="flex-1 px-4 py-3.5 bg-slate-50 border border-slate-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-medium">
+            <button onclick="handleSearch(document.getElementById('manual-input').value)" class="px-5 py-3.5 bg-slate-800 text-white font-bold rounded-xl text-base active:scale-95 transition-all">
               ค้นหา
             </button>
           </div>
@@ -95,81 +95,81 @@
       <div id="inspection-box" class="hidden space-y-4">
 
         <!-- Tracking Header Banner -->
-        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 text-white shadow-md">
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md">
           <div class="flex items-center justify-between">
-            <span class="text-[11px] font-semibold text-blue-100 uppercase tracking-wider">เลขพัสดุ (Tracking ID)</span>
-            <span id="inspect-status-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-blue-700">
+            <span class="text-xs font-bold text-blue-100 uppercase tracking-wider">เลขพัสดุ (Tracking ID)</span>
+            <span id="inspect-status-badge" class="px-3 py-1 rounded-full text-xs font-black bg-white text-blue-700 shadow-sm">
               รอดำเนินการ
             </span>
           </div>
-          <div id="inspect-tracking-id" class="text-xl font-bold font-mono tracking-wide mt-1">
+          <div id="inspect-tracking-id" class="text-2xl font-black font-mono tracking-wide mt-1.5 break-all">
             -
           </div>
-          <div class="flex items-center justify-between text-xs text-blue-100 mt-2 pt-2 border-t border-white/20">
-            <span>Order ID: <b id="inspect-order-id" class="font-mono text-white">-</b></span>
-            <span id="inspect-carrier" class="text-white">-</span>
+          <div class="flex items-center justify-between text-sm font-semibold text-blue-100 mt-2.5 pt-2.5 border-t border-white/20">
+            <span>Order ID: <b id="inspect-order-id" class="font-mono text-white text-base">-</b></span>
+            <span id="inspect-carrier" class="text-white text-sm font-bold">-</span>
           </div>
         </div>
 
         <!-- SKU & Items Checklist (Simple, Clean, SKU + Qty Focus) -->
-        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-3">
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
           <div class="flex items-center justify-between">
-            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-              <span>รายการสินค้า (ตรวจนับจำนวน)</span>
+            <h3 class="font-black text-slate-800 text-base flex items-center gap-2">
+              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              <span>รายการสินค้า (ตรวจนับ)</span>
             </h3>
-            <button onclick="checkAllItems(true)" class="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 active:scale-95 transition-all">
+            <button onclick="checkAllItems(true)" class="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 active:scale-95 transition-all">
               ✓ ติ๊กครบทั้งหมด
             </button>
           </div>
 
           <!-- Items Checklist Container -->
-          <div id="items-checklist-container" class="space-y-2">
+          <div id="items-checklist-container" class="space-y-3">
             <!-- Dynamic SKU Cards -->
           </div>
         </div>
 
         <!-- Photo & Video Attachments (Optimized 720p) -->
-        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-3">
-          <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-            <span>ถ่ายรูปและวิดีโอ (ขนาด 720p เบา ส่งไว)</span>
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
+          <h3 class="font-black text-slate-800 text-base flex items-center gap-2">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>รูปถ่าย & วิดีโอหลักฐาน</span>
           </h3>
 
-          <div class="grid grid-cols-2 gap-2.5">
+          <div class="grid grid-cols-2 gap-3">
             
             <!-- 1. Box Photo Button -->
             <div class="relative">
-              <div id="photo-box-btn" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-3 text-center bg-slate-50 relative cursor-pointer active:scale-95 transition-all">
+              <div id="photo-box-btn" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-4 text-center bg-slate-50 relative cursor-pointer active:scale-95 transition-all">
                 <input type="file" id="photo-input" accept="image/*" capture="environment" onchange="handlePhotoSelect(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                <svg class="w-6 h-6 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                <span class="block text-xs font-bold text-slate-700 mt-1">📷 ถ่ายรูปกล่อง</span>
-                <span class="block text-[10px] text-slate-400">ย่อขนาด 720p ไวใน 1 วิ</span>
+                <svg class="w-8 h-8 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <span class="block text-sm font-black text-slate-700 mt-1.5">📷 ถ่ายรูปกล่อง</span>
+                <span class="block text-xs font-semibold text-slate-400 mt-0.5">บีบอัดอัตโนมัติ</span>
               </div>
 
               <!-- Photo Preview -->
-              <div id="photo-preview-box" class="hidden relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 h-24">
+              <div id="photo-preview-box" class="hidden relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 h-28">
                 <img id="photo-img" src="" alt="Photo" class="w-full h-full object-cover">
-                <button onclick="removePhoto()" class="absolute top-1 right-1 bg-rose-600 text-white p-1 rounded-full shadow">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <button onclick="removePhoto()" class="absolute top-1.5 right-1.5 bg-rose-600 text-white p-1.5 rounded-full shadow">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               </div>
             </div>
 
             <!-- 2. Box Video Button -->
             <div class="relative">
-              <div id="video-box-btn" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-3 text-center bg-slate-50 relative cursor-pointer active:scale-95 transition-all">
+              <div id="video-box-btn" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-4 text-center bg-slate-50 relative cursor-pointer active:scale-95 transition-all">
                 <input type="file" id="video-input" accept="video/*" capture="environment" onchange="handleVideoSelect(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                <svg class="w-6 h-6 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                <span class="block text-xs font-bold text-slate-700 mt-1">🎥 ถ่ายวิดีโอ</span>
-                <span class="block text-[10px] text-slate-400">คลิปสั้นแกะกล่อง</span>
+                <svg class="w-8 h-8 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <span class="block text-sm font-black text-slate-700 mt-1.5">🎥 ถ่ายวิดีโอ</span>
+                <span class="block text-xs font-semibold text-slate-400 mt-0.5">คลิปสั้นแกะกล่อง</span>
               </div>
 
               <!-- Video Preview -->
-              <div id="video-preview-box" class="hidden relative rounded-xl overflow-hidden border border-slate-200 bg-black h-24">
+              <div id="video-preview-box" class="hidden relative rounded-2xl overflow-hidden border border-slate-200 bg-black h-28">
                 <video id="video-player" src="" controls class="w-full h-full object-cover"></video>
-                <button onclick="removeVideo()" class="absolute top-1 right-1 bg-rose-600 text-white p-1 rounded-full shadow">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <button onclick="removeVideo()" class="absolute top-1.5 right-1.5 bg-rose-600 text-white p-1.5 rounded-full shadow">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               </div>
             </div>
@@ -178,12 +178,12 @@
         </div>
 
         <!-- Result Status & Save Action -->
-        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-3">
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
           
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">สถานะผลการตรวจ</label>
-            <select id="inspect-status-select" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="AUTO">✨ คำนวณอัตโนมัติ (ครบ/ไม่ครบ)</option>
+            <label class="block text-sm font-bold text-slate-700 mb-1.5">สถานะผลการตรวจ</label>
+            <select id="inspect-status-select" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-base font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="AUTO">✨ คำนวณอัตโนมัติ (ตามรายการที่ติ๊ก)</option>
               <option value="ครบถ้วน">✅ ครบถ้วนสมบูรณ์</option>
               <option value="สินค้าไม่ครบ">⚠️ สินค้าไม่ครบ</option>
               <option value="สินค้าชำรุดเสียหาย">❌ สินค้าชำรุดเสียหาย</option>
@@ -192,15 +192,15 @@
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">หมายเหตุเพิ่มเติม (ถ้ามี)</label>
-            <input type="text" id="inspect-note-input" placeholder="เช่น กล่องบุบเล็กน้อย สินค้าไม่แตก..." class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <label class="block text-sm font-bold text-slate-700 mb-1.5">หมายเหตุเพิ่มเติม (ถ้ามี)</label>
+            <input type="text" id="inspect-note-input" placeholder="เช่น กล่องบุบเล็กน้อย สินค้าไม่แตก..." class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
           </div>
 
-          <div class="flex gap-2 pt-1">
-            <button onclick="cancelInspection()" class="w-1/3 py-3 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm active:scale-95 transition-all">
+          <div class="flex gap-2.5 pt-2">
+            <button onclick="cancelInspection()" class="w-1/3 py-3.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-base active:scale-95 transition-all">
               ยกเลิก
             </button>
-            <button onclick="saveInspectionResult()" class="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+            <button onclick="saveInspectionResult()" class="flex-1 py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-base shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
               <span>บันทึกส่งข้อมูล</span>
             </button>
@@ -218,24 +218,24 @@
       
       <!-- Staff Counter Stats -->
       <div class="grid grid-cols-2 gap-3">
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
-          <span class="text-[11px] text-slate-400 font-semibold uppercase">ตรวจแล้ววันนี้</span>
-          <div id="staff-stat-today" class="text-2xl font-bold text-emerald-600 mt-0.5">0</div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span class="text-xs text-slate-500 font-bold uppercase">ตรวจแล้ววันนี้</span>
+          <div id="staff-stat-today" class="text-3xl font-black text-emerald-600 mt-1">0</div>
         </div>
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
-          <span class="text-[11px] text-slate-400 font-semibold uppercase">พบปัญหา/ไม่ครบ</span>
-          <div id="staff-stat-issues" class="text-2xl font-bold text-rose-600 mt-0.5">0</div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span class="text-xs text-slate-500 font-bold uppercase">พบปัญหา/ไม่ครบ</span>
+          <div id="staff-stat-issues" class="text-3xl font-black text-rose-600 mt-1">0</div>
         </div>
       </div>
 
       <!-- History List -->
-      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-3">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
         <div class="flex items-center justify-between">
-          <h3 class="font-bold text-slate-800 text-sm">ประวัติการสแกนล่าสุดของคุณ</h3>
-          <span id="staff-history-count" class="text-xs text-slate-400 font-medium">0 รายการ</span>
+          <h3 class="font-black text-slate-800 text-base">ประวัติการสแกนล่าสุด</h3>
+          <span id="staff-history-count" class="text-xs text-slate-500 font-bold">0 รายการ</span>
         </div>
         
-        <div id="staff-history-list" class="space-y-2">
+        <div id="staff-history-list" class="space-y-2.5">
           <!-- Dynamic history items -->
         </div>
       </div>
@@ -246,14 +246,14 @@
 
   <!-- BOTTOM NAVIGATION BAR (2 TABS ONLY) -->
   <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200">
-    <div class="max-w-md mx-auto grid grid-cols-2 h-14">
+    <div class="max-w-md mx-auto grid grid-cols-2 h-16">
       <button onclick="switchView('scanner')" id="tab-btn-scanner" class="flex flex-col items-center justify-center text-blue-600 font-bold transition-all">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
-        <span class="text-[11px] mt-0.5">สแกนตรวจพัสดุ</span>
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+        <span class="text-xs font-bold mt-1">สแกนตรวจพัสดุ</span>
       </button>
-      <button onclick="switchView('dashboard')" id="tab-btn-dashboard" class="flex flex-col items-center justify-center text-slate-400 font-medium transition-all">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-        <span class="text-[11px] mt-0.5">ประวัติ & สถิติ</span>
+      <button onclick="switchView('dashboard')" id="tab-btn-dashboard" class="flex flex-col items-center justify-center text-slate-400 font-bold transition-all">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <span class="text-xs font-bold mt-1">ประวัติ & สถิติ</span>
       </button>
     </div>
   </nav>
@@ -261,23 +261,23 @@
   <!-- CAMERA SCANNER MODAL -->
   <div id="scanner-modal" class="hidden fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-between p-4">
     <div class="w-full max-w-sm flex items-center justify-between text-white py-2">
-      <span class="text-sm font-semibold flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-        หันกล้องไปที่บาร์โค้ด
+      <span class="text-base font-bold flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
+        ส่องบาร์โค้ดหน้ากล่อง
       </span>
-      <button onclick="stopScanner()" class="p-2 bg-rose-600 text-white rounded-full">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <button onclick="stopScanner()" class="p-2.5 bg-rose-600 text-white rounded-full">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
 
-    <!-- Live Scanner Box -->
-    <div class="w-full max-w-xs relative my-auto rounded-3xl overflow-hidden border-2 border-white/40 shadow-2xl bg-black">
+    <!-- Live Scanner Box (Wide Window for 1D Tracking Barcodes) -->
+    <div class="w-full max-w-sm relative my-auto rounded-3xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black">
       <div id="reader" class="w-full"></div>
       <div class="scanner-laser pointer-events-none"></div>
     </div>
 
-    <div class="text-center text-white/70 text-xs py-3">
-      วางบาร์โค้ดให้อยู่ในกรอบ ระบบจะอ่านอัตโนมัติทันที
+    <div class="text-center text-white/90 text-sm font-semibold py-3">
+      วางแถบบาร์โค้ดให้อยู่ในกรอบแนวนอน กล้องจะตรวจจับอัตโนมัติ
     </div>
   </div>
 
