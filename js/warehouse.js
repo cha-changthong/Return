@@ -220,12 +220,13 @@ async function syncDataFromSheet(showToast = false) {
 }
 
 // ==========================================
-// 5. ULTRA-FAST SCANNER ENGINE (ANDROID HARDWARE + IPHONE IOS COMPATIBLE)
+// 5. ULTRA-FAST SCANNER ENGINE (ANDROID HARDWARE + IPHONE ZXING ENGINE)
 // ==========================================
 let nativeDetector = null;
 let scanStream = null;
 let scanAnimationId = null;
 let isTorchActive = false;
+let zxingCodeReader = null;
 
 async function checkNativeBarcodeSupport() {
   if (!('BarcodeDetector' in window) || typeof BarcodeDetector.getSupportedFormats !== 'function') {
@@ -246,8 +247,10 @@ async function startScanner() {
 
   const videoEl = document.getElementById('scanner-video');
   const readerEl = document.getElementById('reader');
+  if (readerEl) readerEl.classList.add('hidden');
+  if (videoEl) videoEl.classList.remove('hidden');
 
-  // 1. Check if Native BarcodeDetector is available & supports 1D Code 128 (Android Chrome)
+  // 1. Android / Chrome: Native BarcodeDetector (Hardware 60 FPS)
   const isNativeSupported = await checkNativeBarcodeSupport();
 
   if (isNativeSupported) {
@@ -259,9 +262,6 @@ async function startScanner() {
           ]
         });
       }
-
-      if (videoEl) videoEl.classList.remove('hidden');
-      if (readerEl) readerEl.classList.add('hidden');
 
       const constraints = {
         video: {
@@ -280,61 +280,75 @@ async function startScanner() {
         return;
       }
     } catch (err) {
-      console.warn('Native stream start failed, falling back to Html5Qrcode:', err);
+      console.warn('Native stream start failed, falling back to ZXing iOS engine:', err);
     }
   }
 
-  // 2. Engine for iPhone (iOS Safari) & fallback browsers (Html5Qrcode / ZXing optimized for iOS)
-  if (videoEl) videoEl.classList.add('hidden');
-  if (readerEl) readerEl.classList.remove('hidden');
-
+  // 2. iPhone (iOS Safari) Engine: ZXing MultiFormat Reader (with TRY_HARDER for wrinkles)
   try {
-    if (!State.html5QrCode) {
-      State.html5QrCode = new Html5Qrcode("reader", {
-        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
-        verbose: false
+    if (typeof ZXing !== 'undefined') {
+      if (!zxingCodeReader) {
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.CODE_39,
+          ZXing.BarcodeFormat.CODE_93,
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.ITF,
+          ZXing.BarcodeFormat.UPC_A,
+          ZXing.BarcodeFormat.UPC_E,
+          ZXing.BarcodeFormat.QR_CODE
+        ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        zxingCodeReader = new ZXing.BrowserMultiFormatReader(hints, 100);
+      }
+
+      const constraints = {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+
+      zxingCodeReader.decodeFromConstraints(constraints, 'scanner-video', (result, err) => {
+        if (result && State.isScanning) {
+          const text = result.getText();
+          if (text) onScanSuccess(text);
+        }
+      }).catch(err => {
+        console.warn('ZXing constrained decode failed, trying standard environment:', err);
+        zxingCodeReader.decodeFromConstraints({ video: { facingMode: "environment" } }, 'scanner-video', (result) => {
+          if (result && State.isScanning) {
+            onScanSuccess(result.getText());
+          }
+        }).catch(finalErr => {
+          console.error('All camera attempts failed:', finalErr);
+          Swal.fire('เปิดกล้องไม่สำเร็จ', 'กรุณาอนุญาตการใช้งานกล้องใน Safari (การตั้งค่า ➔ Safari ➔ กล้อง ➔ อนุญาต)', 'error');
+          stopScanner();
+        });
       });
+      return;
     }
+  } catch (err) {
+    console.warn('ZXing start failed, trying Html5Qrcode fallback:', err);
+  }
 
-    const config = {
-      fps: 25,
-      qrbox: (viewfinderWidth, viewfinderHeight) => {
-        const width = Math.floor(viewfinderWidth * 0.92);
-        const height = Math.floor(Math.max(150, viewfinderHeight * 0.5));
-        return { width: width, height: height };
-      },
-      aspectRatio: 1.333334,
-      videoConstraints: {
-        facingMode: "environment"
-      },
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_93,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.QR_CODE
-      ]
-    };
+  // 3. Fallback: Html5Qrcode
+  try {
+    if (readerEl) readerEl.classList.remove('hidden');
+    if (videoEl) videoEl.classList.add('hidden');
 
+    if (!State.html5QrCode) {
+      State.html5QrCode = new Html5Qrcode("reader");
+    }
+    const config = { fps: 25, qrbox: { width: 280, height: 160 }, aspectRatio: 1.333334 };
     State.html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
       onScanSuccess(decodedText);
-    }).catch(async (err) => {
-      console.warn('Html5Qrcode facingMode start failed, trying device list:', err);
-      const devices = await Html5Qrcode.getCameras();
-      if (devices && devices.length > 0) {
-        let backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment'));
-        let camId = backCam ? backCam.id : devices[0].id;
-        State.html5QrCode.start(camId, config, (decodedText) => {
-          onScanSuccess(decodedText);
-        });
-      }
     });
   } catch (err) {
-    Swal.fire('เปิดกล้องไม่สำเร็จ', 'กรุณาอนุญาตการใช้งานกล้องใน Safari (การตั้งค่า ➔ Safari ➔ กล้อง)', 'error');
+    Swal.fire('เปิดกล้องไม่สำเร็จ', 'กรุณาอนุญาตการใช้งานกล้องใน Safari', 'error');
     stopScanner();
   }
 }
@@ -415,8 +429,16 @@ function stopScanner() {
     scanStream = null;
   }
 
+  if (zxingCodeReader) {
+    try {
+      zxingCodeReader.reset();
+    } catch(e) {}
+  }
+
   const videoEl = document.getElementById('scanner-video');
-  if (videoEl) videoEl.srcObject = null;
+  if (videoEl) {
+    videoEl.srcObject = null;
+  }
 
   isTorchActive = false;
   const btn = document.getElementById('torch-btn');
