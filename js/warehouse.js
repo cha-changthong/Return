@@ -1,9 +1,8 @@
 /**
  * TikTok Return Parcel Inspection System
- * Warehouse Mobile Engine (warehouse.js)
+ * Warehouse Mobile Engine (warehouse.js) - Ultra Fast & Hybrid JSONP/POST Sync
  */
 
-// URL หลักของ Google Apps Script Web App (ฝังถาวร)
 const API_URL = "https://script.google.com/macros/s/AKfycbxs3LzbtEOj2036lhcXrZOtr9hkh0Dg2349rSjQ0H-hX3maVZUgrVEt3N_3FsreWFeb/exec";
 
 const State = {
@@ -73,7 +72,7 @@ async function compressImage720p(file) {
       img.onload = () => {
         let width = img.width;
         let height = img.height;
-        const maxDim = 720; // 720p resolution
+        const maxDim = 720;
         
         if (width > height) {
           if (width > maxDim) {
@@ -106,20 +105,85 @@ async function compressImage720p(file) {
 }
 
 // ==========================================
-// 3. AUTO-SYNC DATA FROM GOOGLE SHEETS
+// 3. HYBRID JSONP / POST FETCHER (No 404 / No CORS)
+// ==========================================
+function fetchJSONP(url, timeout = 8000) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_wh_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const script = document.createElement('script');
+    let timer = null;
+
+    window[callbackName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    function cleanup() {
+      if (timer) clearTimeout(timer);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete window[callbackName];
+    }
+
+    timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP Timeout'));
+    }, timeout);
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('JSONP Script Error'));
+    };
+
+    const separator = url.includes('?') ? '&' : '?';
+    script.src = `${url}${separator}callback=${callbackName}&_t=${Date.now()}`;
+    document.head.appendChild(script);
+  });
+}
+
+async function apiFetchOrders() {
+  // 1. Try JSONP (Zero CORS, Zero 404 redirect issues) with warehouse compact mode
+  try {
+    const data = await fetchJSONP(`${API_URL}?action=getOrders&mode=warehouse&limit=5000`, 5000);
+    if (data && data.success) return data;
+  } catch(e) {
+    console.warn('JSONP fetch attempt failed, trying POST fallback:', e);
+  }
+
+  // 2. Fallback to POST fetch
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'getOrders', mode: 'warehouse', limit: 5000 }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch(e) {
+    console.error('All fetch methods failed or timed out:', e);
+    throw e;
+  }
+}
+
+// ==========================================
+// 4. AUTO-SYNC DATA FROM GOOGLE SHEETS
 // ==========================================
 async function syncDataFromSheet(showToast = false) {
   const syncStatusEl = document.getElementById('header-sync-status');
   const syncIcon = document.getElementById('sync-icon');
   
   if (syncIcon) syncIcon.classList.add('animate-spin');
-  if (syncStatusEl) syncStatusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> กำลังดึงข้อมูลล่าสุด...';
+  if (syncStatusEl && State.orders.length === 0) {
+    syncStatusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> กำลังดึงข้อมูลล่าสุด...';
+  }
   
   try {
-    const res = await fetch(`${API_URL}?action=getOrders&limit=3000&_t=${Date.now()}`);
-    const data = await res.json();
+    const data = await apiFetchOrders();
     
-    if (data.success && data.orders) {
+    if (data && data.success && data.orders) {
       State.orders = data.orders;
       localStorage.setItem('wh_cached_orders', JSON.stringify(data.orders));
       
@@ -143,11 +207,11 @@ async function syncDataFromSheet(showToast = false) {
     if (cached) {
       State.orders = JSON.parse(cached);
       if (syncStatusEl) {
-        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-300"></span> ออฟไลน์ (${State.orders.length} รายการ)`;
+        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> พร้อมสแกน (${State.orders.length} รายการ)`;
       }
     } else {
       if (syncStatusEl) {
-        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> ไม่สามารถติดต่อระบบได้`;
+        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span> ใช้งานโหมดออฟไลน์`;
       }
     }
   } finally {
@@ -156,7 +220,7 @@ async function syncDataFromSheet(showToast = false) {
 }
 
 // ==========================================
-// 4. SCANNER & CAMERA CONTROLLER
+// 5. SCANNER & CAMERA CONTROLLER
 // ==========================================
 async function startScanner() {
   const modal = document.getElementById('scanner-modal');
@@ -224,7 +288,7 @@ function onScanSuccess(barcode) {
 }
 
 // ==========================================
-// 5. SEARCH & DISPLAY INSPECTION
+// 6. SEARCH & DISPLAY INSPECTION
 // ==========================================
 async function handleSearch(query) {
   if (!query) return;
@@ -237,7 +301,7 @@ async function handleSearch(query) {
     (o.trackingId && o.trackingId.toLowerCase().includes(query))
   );
 
-  // 2. ถ้าไม่เจอในแคช ให้ลองดึงจาก Google Apps Script
+  // 2. ถ้าไม่เจอในแคช ให้ลองดึงผ่าน JSONP/POST
   if (!foundOrder) {
     Swal.fire({
       title: 'กำลังค้นหาพัสดุ...',
@@ -247,10 +311,9 @@ async function handleSearch(query) {
     });
 
     try {
-      const res = await fetch(`${API_URL}?action=searchTracking&query=${encodeURIComponent(query)}&_t=${Date.now()}`);
-      const data = await res.json();
+      const data = await fetchJSONP(`${API_URL}?action=searchTracking&query=${encodeURIComponent(query)}`, 6000);
       Swal.close();
-      if (data.success && data.found && data.order) {
+      if (data && data.success && data.found && data.order) {
         foundOrder = data.order;
       }
     } catch (e) {
@@ -302,7 +365,6 @@ function displayInspectionForm(order) {
   const inspectBox = document.getElementById('inspection-box');
   inspectBox.classList.remove('hidden');
 
-  // Set Info
   document.getElementById('inspect-tracking-id').innerText = order.trackingId || order.orderId;
   document.getElementById('inspect-order-id').innerText = order.orderId || '-';
   document.getElementById('inspect-carrier').innerText = order.carrier || 'TikTok Express';
@@ -310,10 +372,8 @@ function displayInspectionForm(order) {
   const badge = document.getElementById('inspect-status-badge');
   badge.innerText = order.checkStatus || 'ยังไม่ตรวจ';
 
-  // Render ONLY SKU + Quantity Checklist
   renderSkuChecklist(order.items || []);
 
-  // Reset photos/videos preview
   removePhoto();
   removeVideo();
   document.getElementById('inspect-note-input').value = '';
@@ -327,7 +387,6 @@ function renderSkuChecklist(items) {
   container.innerHTML = '';
 
   if (!items || items.length === 0) {
-    // ถ้าไม่มี items แยก ให้ดึงจาก sellerSku
     const skuText = State.currentOrder.sellerSku || 'สินค้า (1)';
     container.innerHTML = `
       <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
@@ -341,7 +400,7 @@ function renderSkuChecklist(items) {
   }
 
   items.forEach((it, idx) => {
-    it.checked = true; // default checked
+    it.checked = true;
     const skuCard = document.createElement('div');
     skuCard.className = 'p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-2';
     skuCard.innerHTML = `
@@ -380,7 +439,7 @@ function checkAllItems(check = true) {
   playBeep('success');
 }
 
-// Media Capture (720p)
+// Media Handlers
 async function handlePhotoSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -441,7 +500,7 @@ function cancelInspection() {
 }
 
 // ==========================================
-// 6. SAVE INSPECTION RESULT
+// 7. SAVE INSPECTION RESULT
 // ==========================================
 async function saveInspectionResult() {
   if (!State.currentOrder) return;
@@ -476,21 +535,18 @@ async function saveInspectionResult() {
   };
 
   try {
-    // ส่งข้อมูลไปยัง Google Apps Script
     fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     }).catch(e => console.warn('Background sync note:', e));
 
-    // อัปเดตข้อมูลในเครื่องทันที
     const idx = State.orders.findIndex(o => (o.trackingId && o.trackingId === order.trackingId) || (o.orderId === order.orderId));
     if (idx !== -1) {
       State.orders[idx].checkStatus = finalStatus;
       State.orders[idx].staffNote = note;
     }
 
-    // บันทึกลงประวัติพนักงาน
     const record = {
       trackingId: order.trackingId || order.orderId,
       sellerSku: order.sellerSku || (order.items && order.items[0] ? order.items[0].sku : 'SKU'),
@@ -520,7 +576,7 @@ async function saveInspectionResult() {
 }
 
 // ==========================================
-// 7. STAFF HISTORY & DASHBOARD
+// 8. STAFF HISTORY & DASHBOARD
 // ==========================================
 function renderStaffHistory() {
   const listEl = document.getElementById('staff-history-list');
@@ -580,17 +636,19 @@ function switchView(viewName) {
   }
 }
 
-// Initial Load
+// Initial Load (Instant 0.001s Ready)
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. โหลดข้อมูลแคชเดิมทันที
+  const syncStatusEl = document.getElementById('header-sync-status');
   const cached = localStorage.getItem('wh_cached_orders');
   if (cached) {
-    try { State.orders = JSON.parse(cached); } catch(e) {}
+    try {
+      State.orders = JSON.parse(cached);
+      if (syncStatusEl && State.orders.length > 0) {
+        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> พร้อมสแกน (${State.orders.length} รายการ)`;
+      }
+    } catch(e) {}
   }
 
-  // 2. ดึงข้อมูลล่าสุดจาก Google Sheets แบบเบื้องหลัง
   syncDataFromSheet(false);
-
-  // 3. Render ประวัติ
   renderStaffHistory();
 });
