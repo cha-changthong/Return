@@ -14,6 +14,9 @@ const State = {
   html5QrCode: null,
   isScanning: false,
   
+  currentInspectionStatus: 'ครบถ้วน',
+  currentIssueSubOption: 'ไม่ครบ',
+
   photoBase64: null,
   videoBase64: null,
   
@@ -171,6 +174,16 @@ async function apiFetchOrders() {
 // ==========================================
 // 4. AUTO-SYNC DATA FROM GOOGLE SHEETS
 // ==========================================
+function updateHeaderPendingCount() {
+  const syncStatusEl = document.getElementById('header-sync-status');
+  if (!syncStatusEl) return;
+  const pending = (State.orders || []).filter(o => {
+    const s = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
+    return !s || s === 'ยังไม่ตรวจ';
+  }).length;
+  syncStatusEl.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> พร้อมสแกน (${pending.toLocaleString()} รายการ)`;
+}
+
 async function syncDataFromSheet(showToast = false) {
   const syncStatusEl = document.getElementById('header-sync-status');
   const syncIcon = document.getElementById('sync-icon');
@@ -187,15 +200,16 @@ async function syncDataFromSheet(showToast = false) {
       State.orders = data.orders;
       localStorage.setItem('wh_cached_orders', JSON.stringify(data.orders));
       
-      if (syncStatusEl) {
-        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> พร้อมสแกน (${data.orders.length} รายการ)`;
-      }
+      updateHeaderPendingCount();
+      renderStaffHistory();
+
       if (showToast) {
+        const pending = State.orders.filter(o => !o.checkStatus || o.checkStatus === 'ยังไม่ตรวจ').length;
         Swal.fire({
           toast: true,
           position: 'top-end',
           icon: 'success',
-          title: `อัปเดตข้อมูลแล้ว ${data.orders.length} รายการ`,
+          title: `อัปเดตแล้ว: คงเหลือ ${pending.toLocaleString()} รายการยังไม่ตรวจ`,
           showConfirmButton: false,
           timer: 1500
         });
@@ -206,9 +220,8 @@ async function syncDataFromSheet(showToast = false) {
     const cached = localStorage.getItem('wh_cached_orders');
     if (cached) {
       State.orders = JSON.parse(cached);
-      if (syncStatusEl) {
-        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> พร้อมสแกน (${State.orders.length} รายการ)`;
-      }
+      updateHeaderPendingCount();
+      renderStaffHistory();
     } else {
       if (syncStatusEl) {
         syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span> ใช้งานโหมดออฟไลน์`;
@@ -578,10 +591,65 @@ async function handleSearch(query) {
   }
 }
 
+function selectInspectionStatus(mainStatus) {
+  const btnComplete = document.getElementById('btn-status-complete');
+  const btnIssue = document.getElementById('btn-status-issue');
+  const issueSubOptions = document.getElementById('issue-sub-options');
+  const mediaSection = document.getElementById('media-section');
+
+  if (mainStatus === 'ครบถ้วน') {
+    State.currentInspectionStatus = 'ครบถ้วน';
+    if (btnComplete) {
+      btnComplete.className = 'py-3 px-3 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 transition-all border-2 border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm active:scale-95';
+    }
+    if (btnIssue) {
+      btnIssue.className = 'py-3 px-3 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all border-2 border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 active:scale-95';
+    }
+    if (issueSubOptions) issueSubOptions.classList.add('hidden');
+    if (mediaSection) mediaSection.classList.add('hidden');
+  } else {
+    State.currentInspectionStatus = State.currentIssueSubOption || 'ไม่ครบ';
+    if (btnComplete) {
+      btnComplete.className = 'py-3 px-3 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all border-2 border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 active:scale-95';
+    }
+    if (btnIssue) {
+      btnIssue.className = 'py-3 px-3 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 transition-all border-2 border-rose-500 bg-rose-50 text-rose-700 shadow-sm active:scale-95';
+    }
+    if (issueSubOptions) issueSubOptions.classList.remove('hidden');
+    if (mediaSection) mediaSection.classList.remove('hidden');
+    selectIssueSubOption(State.currentIssueSubOption || 'ไม่ครบ');
+  }
+  triggerHaptic(25);
+}
+
+function selectIssueSubOption(subOption) {
+  State.currentIssueSubOption = subOption;
+  State.currentInspectionStatus = subOption;
+
+  const subBtns = {
+    'ไม่ครบ': 'btn-sub-incomplete',
+    'ชำรุด': 'btn-sub-damaged',
+    'ไม่ตรง': 'btn-sub-wrong'
+  };
+
+  Object.entries(subBtns).forEach(([opt, btnId]) => {
+    const el = document.getElementById(btnId);
+    if (!el) return;
+    if (opt === subOption) {
+      el.className = 'py-2.5 px-2 rounded-xl text-xs font-black border-2 border-rose-500 bg-rose-100/70 text-rose-800 transition-all active:scale-95 text-center shadow-sm';
+    } else {
+      el.className = 'py-2.5 px-2 rounded-xl text-xs font-semibold border-2 border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 transition-all active:scale-95 text-center';
+    }
+  });
+  triggerHaptic(20);
+}
+
 function displayInspectionForm(order) {
   State.currentOrder = order;
   State.photoBase64 = null;
   State.videoBase64 = null;
+  State.currentInspectionStatus = 'ครบถ้วน';
+  State.currentIssueSubOption = 'ไม่ครบ';
 
   document.getElementById('scan-trigger-card').classList.add('hidden');
   const inspectBox = document.getElementById('inspection-box');
@@ -589,17 +657,21 @@ function displayInspectionForm(order) {
 
   document.getElementById('inspect-tracking-id').innerText = order.trackingId || order.orderId;
   document.getElementById('inspect-order-id').innerText = order.orderId || '-';
-  document.getElementById('inspect-carrier').innerText = order.carrier || 'TikTok Express';
+  const carrierEl = document.getElementById('inspect-carrier');
+  if (carrierEl) carrierEl.innerText = order.carrier || 'TikTok Express';
 
   const badge = document.getElementById('inspect-status-badge');
-  badge.innerText = order.checkStatus || 'ยังไม่ตรวจ';
+  if (badge) badge.innerText = order.checkStatus || 'ยังไม่ตรวจ';
 
   renderSkuChecklist(order.items || []);
 
   removePhoto();
   removeVideo();
-  document.getElementById('inspect-note-input').value = '';
-  document.getElementById('inspect-status-select').value = 'AUTO';
+  const noteInput = document.getElementById('inspect-note-input');
+  if (noteInput) noteInput.value = '';
+
+  // Default to ครบถ้วน (media hidden, sub-options hidden)
+  selectInspectionStatus('ครบถ้วน');
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -609,15 +681,17 @@ function renderSkuChecklist(items) {
   container.innerHTML = '';
 
   if (!items || items.length === 0) {
-    const skuText = State.currentOrder.sellerSku || 'สินค้า (1)';
+    const skuText = State.currentOrder.sellerSku || 'สินค้า';
     container.innerHTML = `
-      <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
-        <label class="flex items-center gap-3.5 cursor-pointer flex-1">
-          <input type="checkbox" checked class="w-6 h-6 text-blue-600 rounded-lg border-slate-300">
-          <span class="font-black text-slate-900 text-base break-words">${skuText}</span>
+      <div class="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 flex items-center justify-between gap-3">
+        <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+          <input type="checkbox" checked onchange="toggleItemCheck(0, this.checked)" class="w-6 h-6 text-blue-600 rounded-lg border-slate-300 focus:ring-blue-500 flex-shrink-0">
+          <div class="min-w-0">
+            <span class="font-black text-slate-900 text-base break-words block">${skuText}</span>
+          </div>
         </label>
-        <span class="bg-blue-100 text-blue-900 font-black text-sm px-3 py-1.5 rounded-xl border border-blue-200 shadow-sm flex-shrink-0">
-          จำนวน: ${State.currentOrder.totalQuantity || 1}
+        <span class="bg-blue-600 text-white font-black text-sm px-3 py-1.5 rounded-xl shadow-sm flex-shrink-0">
+          x ${State.currentOrder.totalQuantity || 1} ชิ้น
         </span>
       </div>
     `;
@@ -627,18 +701,18 @@ function renderSkuChecklist(items) {
   items.forEach((it, idx) => {
     it.checked = true;
     const skuCard = document.createElement('div');
-    skuCard.className = 'p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3';
+    skuCard.className = 'p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3';
     skuCard.innerHTML = `
-      <label class="flex items-center gap-3.5 cursor-pointer flex-1 min-w-0">
+      <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
         <input type="checkbox" id="chk-item-${idx}" checked onchange="toggleItemCheck(${idx}, this.checked)" class="w-6 h-6 text-blue-600 rounded-lg border-slate-300 focus:ring-blue-500 flex-shrink-0">
         <div class="min-w-0">
-          <div class="font-black text-slate-900 text-base break-words">${it.sku || 'SKU'}</div>
-          ${it.variation ? `<div class="text-xs font-semibold text-slate-500 mt-0.5">${it.variation}</div>` : ''}
+          <div class="font-black text-slate-900 text-base leading-snug break-words">${it.sku || it.sellerSku || 'SKU'}</div>
+          ${it.variation ? `<div class="text-xs font-semibold text-slate-500 mt-0.5 truncate">${it.variation}</div>` : ''}
         </div>
       </label>
       <div class="text-right flex-shrink-0">
-        <span class="inline-block bg-blue-100 text-blue-900 font-black text-sm px-3.5 py-1.5 rounded-xl border border-blue-200 shadow-sm">
-          จำนวน: ${it.quantity || 1}
+        <span class="inline-block bg-blue-100 text-blue-900 font-black text-sm px-3 py-1.5 rounded-xl border border-blue-200">
+          x ${it.quantity || 1} ชิ้น
         </span>
       </div>
     `;
@@ -647,9 +721,17 @@ function renderSkuChecklist(items) {
 }
 
 function toggleItemCheck(idx, isChecked) {
-  if (State.currentOrder && State.currentOrder.items[idx]) {
+  if (State.currentOrder && State.currentOrder.items && State.currentOrder.items[idx]) {
     State.currentOrder.items[idx].checked = isChecked;
     triggerHaptic(30);
+
+    const allChecked = State.currentOrder.items.every(it => it.checked !== false);
+    if (!allChecked) {
+      selectInspectionStatus('ไม่ถูกต้อง');
+      selectIssueSubOption('ไม่ครบ');
+    } else {
+      selectInspectionStatus('ครบถ้วน');
+    }
   }
 }
 
@@ -662,6 +744,9 @@ function checkAllItems(check = true) {
   });
   triggerHaptic(40);
   playBeep('success');
+  if (check) {
+    selectInspectionStatus('ครบถ้วน');
+  }
 }
 
 // Media Handlers
@@ -704,48 +789,43 @@ async function handleVideoSelect(event) {
 
 function removePhoto() {
   State.photoBase64 = null;
-  document.getElementById('photo-preview-box').classList.add('hidden');
-  document.getElementById('photo-box-btn').classList.remove('hidden');
-  document.getElementById('photo-input').value = '';
+  const prevBox = document.getElementById('photo-preview-box');
+  const btn = document.getElementById('photo-box-btn');
+  const input = document.getElementById('photo-input');
+  if (prevBox) prevBox.classList.add('hidden');
+  if (btn) btn.classList.remove('hidden');
+  if (input) input.value = '';
 }
 
 function removeVideo() {
   State.videoBase64 = null;
-  document.getElementById('video-preview-box').classList.add('hidden');
-  document.getElementById('video-box-btn').classList.remove('hidden');
-  document.getElementById('video-input').value = '';
+  const prevBox = document.getElementById('video-preview-box');
+  const btn = document.getElementById('video-box-btn');
+  const input = document.getElementById('video-input');
+  if (prevBox) prevBox.classList.add('hidden');
+  if (btn) btn.classList.remove('hidden');
+  if (input) input.value = '';
 }
 
 function cancelInspection() {
   State.currentOrder = null;
   document.getElementById('inspection-box').classList.add('hidden');
   document.getElementById('scan-trigger-card').classList.remove('hidden');
-  document.getElementById('manual-input').value = '';
+  const manualInp = document.getElementById('manual-input');
+  if (manualInp) manualInp.value = '';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ==========================================
-// 7. SAVE INSPECTION RESULT
+// 7. SAVE INSPECTION RESULT & AUTO-OPEN CAMERA
 // ==========================================
 async function saveInspectionResult() {
   if (!State.currentOrder) return;
   const order = State.currentOrder;
 
-  const statusSelect = document.getElementById('inspect-status-select').value;
-  const note = document.getElementById('inspect-note-input').value.trim();
-
-  let finalStatus = statusSelect;
-  if (statusSelect === 'AUTO') {
-    const allChecked = (order.items || []).every(it => it.checked !== false);
-    finalStatus = allChecked ? 'ครบถ้วน' : 'สินค้าไม่ครบ';
-  }
-
-  Swal.fire({
-    title: 'กำลังบันทึกข้อมูล...',
-    text: 'อัปเดต Google Sheet และอัปโหลดรูปภาพ',
-    allowOutsideClick: false,
-    didOpen: () => Swal.showLoading()
-  });
+  const finalStatus = State.currentInspectionStatus || 'ครบถ้วน';
+  const noteInput = document.getElementById('inspect-note-input');
+  const note = noteInput ? noteInput.value.trim() : '';
 
   const nowThai = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 
@@ -762,6 +842,7 @@ async function saveInspectionResult() {
   };
 
   try {
+    // Send background sync to Google Apps Script
     fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -780,16 +861,25 @@ async function saveInspectionResult() {
     playBeep('success');
     triggerHaptic(100);
 
+    // Fast top toast notification (does not block UI)
     Swal.fire({
+      toast: true,
+      position: 'top',
       icon: 'success',
-      title: 'บันทึกสำเร็จ!',
-      text: `${order.trackingId || order.orderId} : ${finalStatus}`,
-      timer: 1500,
-      showConfirmButton: false
+      title: `บันทึกสำเร็จ (${finalStatus})`,
+      showConfirmButton: false,
+      timer: 1300
     });
 
     cancelInspection();
     renderStaffHistory();
+    updateHeaderPendingCount();
+
+    // Automatically reopen camera scanner immediately for the next parcel
+    setTimeout(() => {
+      startScanner();
+    }, 250);
+
   } catch (err) {
     Swal.fire('บันทึกไม่สำเร็จ', err.message, 'error');
   }
@@ -847,7 +937,7 @@ function renderStaffHistory() {
     const s = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
     if (!s || s === 'ยังไม่ตรวจ') {
       pending++;
-    } else if (s.includes('ครบ')) {
+    } else if (s.includes('ครบ') && !s.includes('ไม่ครบ')) {
       completed++;
     } else {
       issues++;
@@ -862,9 +952,13 @@ function renderStaffHistory() {
   // 2. Filter Orders
   const filtered = orders.filter(o => {
     const s = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
-    if (staffFilter === 'COMPLETED' && !s.includes('ครบ')) return false;
-    if (staffFilter === 'ISSUES' && (s === 'ยังไม่ตรวจ' || !s || s.includes('ครบ'))) return false;
-    if (staffFilter === 'PENDING' && s !== 'ยังไม่ตรวจ' && s !== '') return false;
+    const isCompleted = s.includes('ครบ') && !s.includes('ไม่ครบ');
+    const isPending = !s || s === 'ยังไม่ตรวจ';
+    const isIssue = !isPending && !isCompleted;
+
+    if (staffFilter === 'COMPLETED' && !isCompleted) return false;
+    if (staffFilter === 'ISSUES' && !isIssue) return false;
+    if (staffFilter === 'PENDING' && !isPending) return false;
 
     if (q) {
       const match = (o.orderId && o.orderId.toLowerCase().includes(q)) ||
@@ -884,7 +978,7 @@ function renderStaffHistory() {
 
   listEl.innerHTML = filtered.slice(0, 40).map(o => {
     const st = String(o.checkStatus || 'ยังไม่ตรวจ').trim();
-    const isCompleted = st.includes('ครบ');
+    const isCompleted = st.includes('ครบ') && !st.includes('ไม่ครบ');
     const isPending = !st || st === 'ยังไม่ตรวจ';
     const badgeColor = isPending ? 'bg-amber-100 text-amber-800 border-amber-200' :
                        isCompleted ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
@@ -947,8 +1041,10 @@ function openStaffDetailModal(order) {
   const statusEl = document.getElementById('staff-modal-status');
   const st = order.checkStatus || 'ยังไม่ตรวจ';
   statusEl.innerText = st;
-  statusEl.className = st.includes('ครบ') ? 'font-bold text-emerald-600' :
-                       (st === 'ยังไม่ตรวจ' ? 'font-bold text-amber-600' : 'font-bold text-rose-600');
+  const isCompleted = st.includes('ครบ') && !st.includes('ไม่ครบ');
+  const isPending = !st || st === 'ยังไม่ตรวจ';
+  statusEl.className = isCompleted ? 'font-bold text-emerald-600' :
+                       (isPending ? 'font-bold text-amber-600' : 'font-bold text-rose-600');
 
   document.getElementById('staff-modal-time').innerText = order.checkedAt || '-';
   document.getElementById('staff-modal-total-qty').innerText = `${order.totalQuantity || 1} ชิ้น`;
@@ -1059,7 +1155,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       State.orders = JSON.parse(cached);
       if (syncStatusEl && State.orders.length > 0) {
-        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> พร้อมสแกน (${State.orders.length} รายการ)`;
+        updateHeaderPendingCount();
       }
     } catch(e) {}
   }
