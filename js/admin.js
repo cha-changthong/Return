@@ -156,8 +156,8 @@ function applyFilters() {
     if (st !== 'ALL') {
       const status = String(o.checkStatus || 'ยังไม่ตรวจ');
       if (st === 'PENDING' && status !== 'ยังไม่ตรวจ' && status !== '') return false;
-      if (st === 'COMPLETED' && !status.includes('ครบ')) return false;
-      if (st === 'ISSUES' && (status === 'ยังไม่ตรวจ' || status.includes('ครบ'))) return false;
+      if (st === 'COMPLETED' && (!status.includes('ครบ') || status.includes('ไม่ครบ'))) return false;
+      if (st === 'ISSUES' && (status === 'ยังไม่ตรวจ' || (status.includes('ครบ') && !status.includes('ไม่ครบ')))) return false;
     }
 
     // Search Query
@@ -190,7 +190,7 @@ function renderDashboard() {
     const s = String(o.checkStatus || 'ยังไม่ตรวจ');
     if (s === 'ยังไม่ตรวจ' || !s) {
       pending++;
-    } else if (s.includes('ครบ')) {
+    } else if (s.includes('ครบ') && !s.includes('ไม่ครบ')) {
       completed++;
     } else {
       issues++;
@@ -228,7 +228,7 @@ function renderDashboard() {
         <td class="py-3 px-4">
           <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
             !o.checkStatus || o.checkStatus === 'ยังไม่ตรวจ' ? 'bg-amber-100 text-amber-800' :
-            o.checkStatus.includes('ครบ') ? 'bg-emerald-100 text-emerald-800' :
+            (o.checkStatus.includes('ครบ') && !o.checkStatus.includes('ไม่ครบ')) ? 'bg-emerald-100 text-emerald-800' :
             'bg-rose-100 text-rose-800'
           }">
             ${o.checkStatus || 'ยังไม่ตรวจ'}
