@@ -142,7 +142,104 @@ async function refreshOrdersFromSheet(showToast = false) {
 }
 
 // ==========================================
-// 3. DASHBOARD RENDERING & FILTERS
+// 3. DATE UTILITIES & DEADLINE TRACKING (10 DAYS)
+// ==========================================
+function parseExcelDate(val) {
+  if (!val) return null;
+  if (val instanceof Date && !isNaN(val.getTime())) return val;
+  if (typeof val === 'number') {
+    // Excel date serial number
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    return isNaN(date.getTime()) ? null : date;
+  }
+  const str = String(val).trim();
+  if (!str || str === '-' || str === 'N/A') return null;
+
+  // Format 1: YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const hour = ymdMatch[4] ? parseInt(ymdMatch[4], 10) : 0;
+    const min = ymdMatch[5] ? parseInt(ymdMatch[5], 10) : 0;
+    const sec = ymdMatch[6] ? parseInt(ymdMatch[6], 10) : 0;
+    const d = new Date(year, month, day, hour, min, sec);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Format 2: DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    const hour = dmyMatch[4] ? parseInt(dmyMatch[4], 10) : 0;
+    const min = dmyMatch[5] ? parseInt(dmyMatch[5], 10) : 0;
+    const sec = dmyMatch[6] ? parseInt(dmyMatch[6], 10) : 0;
+    const d = new Date(year, month, day, hour, min, sec);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Fallback to native parse
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) return fallback;
+
+  return null;
+}
+
+function formatDateTime(d) {
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const mins = pad(d.getMinutes());
+  return `${year}-${month}-${day} ${hours}:${mins}`;
+}
+
+function getOrderOverdueInfo(order) {
+  const checkStatus = String(order.checkStatus || 'ยังไม่ตรวจ').trim();
+  const isPending = !checkStatus || checkStatus === 'ยังไม่ตรวจ';
+  
+  const returnTimeStr = order.returnTime || '';
+  const deadlineAtStr = order.deadlineAt || '';
+  
+  let deadline = null;
+  if (deadlineAtStr) {
+    deadline = parseExcelDate(deadlineAtStr);
+  }
+  
+  const returnDate = parseExcelDate(returnTimeStr);
+  if (!deadline && returnDate) {
+    deadline = new Date(returnDate.getTime() + 10 * 24 * 60 * 60 * 1000);
+  }
+  
+  if (!deadline) {
+    return {
+      isOverdue: false,
+      daysOverdue: 0,
+      deadlineStr: deadlineAtStr || '-',
+      returnTimeStr: returnTimeStr || '-'
+    };
+  }
+  
+  const now = new Date();
+  const diffMs = now.getTime() - deadline.getTime();
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const isOverdue = isPending && (diffMs > 0);
+  
+  return {
+    isOverdue,
+    daysOverdue: Math.max(0, diffDays + 1),
+    deadlineStr: formatDateTime(deadline),
+    returnTimeStr: returnDate ? formatDateTime(returnDate) : returnTimeStr
+  };
+}
+
+// ==========================================
+// 4. DASHBOARD RENDERING & FILTERS
 // ==========================================
 function applyFilters() {
   const q = (document.getElementById('admin-search-input')?.value || '').trim().toLowerCase();
@@ -152,12 +249,20 @@ function applyFilters() {
   AdminState.statusFilter = st;
 
   AdminState.filteredOrders = AdminState.orders.filter(o => {
+    const status = String(o.checkStatus || 'ยังไม่ตรวจ');
+    const ov = getOrderOverdueInfo(o);
+    const isPending = !status || status === 'ยังไม่ตรวจ';
+    const isCompleted = (status.includes('ครบ') && !status.includes('ไม่ครบ'));
+    const isIssue = !isPending && !isCompleted;
+    const isOverdue = ov.isOverdue;
+    const isPendingNotOverdue = isPending && !isOverdue;
+
     // Status Filter
     if (st !== 'ALL') {
-      const status = String(o.checkStatus || 'ยังไม่ตรวจ');
-      if (st === 'PENDING' && status !== 'ยังไม่ตรวจ' && status !== '') return false;
-      if (st === 'COMPLETED' && (!status.includes('ครบ') || status.includes('ไม่ครบ'))) return false;
-      if (st === 'ISSUES' && (status === 'ยังไม่ตรวจ' || (status.includes('ครบ') && !status.includes('ไม่ครบ')))) return false;
+      if (st === 'PENDING' && !isPendingNotOverdue) return false;
+      if (st === 'OVERDUE' && !isOverdue) return false;
+      if (st === 'COMPLETED' && !isCompleted) return false;
+      if (st === 'ISSUES' && !isIssue) return false;
     }
 
     // Search Query
@@ -184,27 +289,51 @@ function renderDashboard() {
   let total = orders.length;
   let completed = 0;
   let issues = 0;
-  let pending = 0;
+  let pendingNotOverdue = 0;
+  let overdue = 0;
 
   orders.forEach(o => {
     const s = String(o.checkStatus || 'ยังไม่ตรวจ');
-    if (s === 'ยังไม่ตรวจ' || !s) {
-      pending++;
-    } else if (s.includes('ครบ') && !s.includes('ไม่ครบ')) {
+    const isPending = !s || s === 'ยังไม่ตรวจ';
+    const isCompleted = (s.includes('ครบ') && !s.includes('ไม่ครบ'));
+    
+    if (isPending) {
+      const ov = getOrderOverdueInfo(o);
+      if (ov.isOverdue) {
+        overdue++;
+      } else {
+        pendingNotOverdue++;
+      }
+    } else if (isCompleted) {
       completed++;
     } else {
       issues++;
     }
   });
 
-  const percent = total > 0 ? Math.round(((completed + issues) / total) * 100) : 0;
+  const checkedCount = completed + issues;
+  const percent = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
 
   document.getElementById('stat-total').innerText = total.toLocaleString();
   document.getElementById('stat-completed').innerText = completed.toLocaleString();
   document.getElementById('stat-issues').innerText = issues.toLocaleString();
-  document.getElementById('stat-pending').innerText = pending.toLocaleString();
+  document.getElementById('stat-pending').innerText = pendingNotOverdue.toLocaleString();
+  
+  const overdueEl = document.getElementById('stat-overdue');
+  if (overdueEl) {
+    overdueEl.innerText = overdue.toLocaleString();
+    const cardOverdue = document.getElementById('card-stat-overdue');
+    if (cardOverdue) {
+      if (overdue > 0) {
+        cardOverdue.className = 'bg-rose-50 p-4 sm:p-5 rounded-2xl border-2 border-rose-500 shadow-md cursor-pointer hover:shadow-lg active:scale-95 transition-all group relative overflow-hidden ring-2 ring-rose-200';
+      } else {
+        cardOverdue.className = 'bg-white p-4 sm:p-5 rounded-2xl border border-rose-200 shadow-sm cursor-pointer hover:border-rose-500 hover:shadow-md active:scale-95 transition-all group relative overflow-hidden';
+      }
+    }
+  }
+
   document.getElementById('stat-progress-bar').style.width = `${percent}%`;
-  document.getElementById('stat-progress-text').innerText = `${percent}% (${completed + issues}/${total})`;
+  document.getElementById('stat-progress-text').innerText = `${percent}% (${checkedCount}/${total})`;
 
   // Pagination & Table
   const totalFiltered = filtered.length;
@@ -216,31 +345,67 @@ function renderDashboard() {
 
   const tbody = document.getElementById('admin-table-body');
   if (pageItems.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="py-10 text-center text-slate-400 text-sm">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="py-10 text-center text-slate-400 text-sm">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
   } else {
-    tbody.innerHTML = pageItems.map(o => `
-      <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100 text-sm">
-        <td class="py-3 px-4 font-mono font-bold text-slate-800">${o.trackingId || '-'}</td>
-        <td class="py-3 px-4 font-mono text-xs text-slate-500">${o.orderId}</td>
-        <td class="py-3 px-4 font-medium text-slate-700">${o.sellerSku || '-'}</td>
-        <td class="py-3 px-4 text-xs text-slate-600 max-w-xs truncate" title="${o.productSummary || ''}">${o.productSummary || '-'}</td>
-        <td class="py-3 px-4 text-center font-bold text-slate-800">${o.totalQuantity || 1}</td>
-        <td class="py-3 px-4">
-          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
-            !o.checkStatus || o.checkStatus === 'ยังไม่ตรวจ' ? 'bg-amber-100 text-amber-800' :
-            (o.checkStatus.includes('ครบ') && !o.checkStatus.includes('ไม่ครบ')) ? 'bg-emerald-100 text-emerald-800' :
-            'bg-rose-100 text-rose-800'
-          }">
-            ${o.checkStatus || 'ยังไม่ตรวจ'}
+    tbody.innerHTML = pageItems.map(o => {
+      const ov = getOrderOverdueInfo(o);
+      const isPending = !o.checkStatus || o.checkStatus === 'ยังไม่ตรวจ';
+      const isCompleted = (o.checkStatus && o.checkStatus.includes('ครบ') && !o.checkStatus.includes('ไม่ครบ'));
+
+      let statusBadge = '';
+      if (ov.isOverdue) {
+        statusBadge = `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-rose-600 text-white shadow-md shadow-rose-500/40 animate-pulse ring-2 ring-rose-400">
+            <span class="w-2 h-2 rounded-full bg-white animate-ping"></span>
+            🚨 เกินกำหนด (${ov.daysOverdue} วัน)
           </span>
-        </td>
-        <td class="py-3 px-4 text-center">
-          <button onclick="viewDetails('${o.orderId}')" class="px-3 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-colors">
-            ดูรายละเอียด
-          </button>
-        </td>
-      </tr>
-    `).join('');
+        `;
+      } else if (isPending) {
+        statusBadge = `
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+            ยังไม่ตรวจ
+          </span>
+        `;
+      } else if (isCompleted) {
+        statusBadge = `
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+            ${o.checkStatus}
+          </span>
+        `;
+      } else {
+        statusBadge = `
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800">
+            ${o.checkStatus}
+          </span>
+        `;
+      }
+
+      return `
+        <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100 text-sm ${ov.isOverdue ? 'bg-rose-50/40' : ''}">
+          <td class="py-3 px-4 font-mono font-bold text-slate-800">${o.trackingId || '-'}</td>
+          <td class="py-3 px-4 font-mono text-xs text-slate-500">${o.orderId}</td>
+          <td class="py-3 px-4 font-medium text-slate-700">${o.sellerSku || '-'}</td>
+          <td class="py-3 px-4 text-xs text-slate-600 max-w-xs truncate" title="${o.productSummary || ''}">${o.productSummary || '-'}</td>
+          <td class="py-3 px-4 text-center font-bold text-slate-800">${o.totalQuantity || 1}</td>
+          <td class="py-3 px-4 text-xs">
+            ${ov.returnTimeStr && ov.returnTimeStr !== '-' ? `
+              <div class="text-slate-700 font-semibold">${ov.returnTimeStr}</div>
+              <div class="text-[11px] ${ov.isOverdue ? 'text-rose-600 font-black' : 'text-slate-400'}">
+                ครบกำหนด: ${ov.deadlineStr || '-'}
+              </div>
+            ` : `<span class="text-slate-400">-</span>`}
+          </td>
+          <td class="py-3 px-4">
+            ${statusBadge}
+          </td>
+          <td class="py-3 px-4 text-center">
+            <button onclick="viewDetails('${o.orderId}')" class="px-3 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-colors">
+              ดูรายละเอียด
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   }
 
   document.getElementById('admin-page-info').innerText = `หน้า ${AdminState.page} จาก ${totalPages} (ทั้งหมด ${totalFiltered.toLocaleString()} รายการ)`;
@@ -310,6 +475,18 @@ function viewDetails(orderId) {
 
   document.getElementById('modal-checked-at').innerText = order.checkedAt || '-';
   document.getElementById('modal-total-qty').innerText = `${order.totalQuantity || 1} ชิ้น`;
+
+  const ov = getOrderOverdueInfo(order);
+  const returnTimeEl = document.getElementById('modal-return-time');
+  const deadlineEl = document.getElementById('modal-deadline');
+  if (returnTimeEl) returnTimeEl.innerText = (ov.returnTimeStr && ov.returnTimeStr !== '-') ? ov.returnTimeStr : '-';
+  if (deadlineEl) {
+    if (ov.isOverdue) {
+      deadlineEl.innerHTML = `<span class="text-rose-600 font-black animate-pulse">🚨 ${ov.deadlineStr} (เกินกำหนด ${ov.daysOverdue} วัน)</span>`;
+    } else {
+      deadlineEl.innerText = (ov.deadlineStr && ov.deadlineStr !== '-') ? ov.deadlineStr : '-';
+    }
+  }
 
   // Display only Seller SKU and Quantity
   const itemsContainer = document.getElementById('modal-items-list');
@@ -393,21 +570,26 @@ function exportToExcel() {
     return;
   }
 
-  const rows = AdminState.orders.map(o => ({
-    'Order ID': o.orderId,
-    'Tracking ID': o.trackingId,
-    'Seller SKU': o.sellerSku,
-    'Product Summary': o.productSummary,
-    'Total Quantity': o.totalQuantity,
-    'Order Status': o.orderStatus,
-    'Return Reason': o.returnReason,
-    'Check Status': o.checkStatus,
-    'Staff Note': o.staffNote,
-    'Checked By': o.checkedBy,
-    'Checked At': o.checkedAt,
-    'Photo URL': o.photoUrl,
-    'Video URL': o.videoUrl
-  }));
+  const rows = AdminState.orders.map(o => {
+    const ov = getOrderOverdueInfo(o);
+    return {
+      'Order ID': o.orderId,
+      'Tracking ID': o.trackingId,
+      'Seller SKU': o.sellerSku,
+      'Product Summary': o.productSummary,
+      'Total Quantity': o.totalQuantity,
+      'Order Status': o.orderStatus,
+      'Return Reason': o.returnReason,
+      'Return Time': o.returnTime || ov.returnTimeStr || '',
+      'Deadline (10 Days)': o.deadlineAt || ov.deadlineStr || '',
+      'Check Status': ov.isOverdue ? `เกินกำหนด (${ov.daysOverdue} วัน)` : (o.checkStatus || 'ยังไม่ตรวจ'),
+      'Staff Note': o.staffNote,
+      'Checked By': o.checkedBy,
+      'Checked At': o.checkedAt,
+      'Photo URL': o.photoUrl,
+      'Video URL': o.videoUrl
+    };
+  });
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -436,7 +618,7 @@ async function processSelectedFiles() {
 
   const readWorkbook = async (file) => {
     const data = await file.arrayBuffer();
-    return XLSX.read(data, { type: 'array' });
+    return XLSX.read(data, { type: 'array', cellDates: true });
   };
 
   try {
@@ -461,6 +643,12 @@ async function processSelectedFiles() {
         const cCarrier = h.indexOf('Shipping Provider Name');
         const cBuyer = h.indexOf('Buyer Username');
 
+        // Column M or "Time Requested"
+        let cTimeReq1 = h.findIndex(col => col && col.toLowerCase().includes('time requested'));
+        if (cTimeReq1 === -1) cTimeReq1 = h.findIndex(col => col && col.toLowerCase().includes('request time'));
+        if (cTimeReq1 === -1 && h.length > 12) cTimeReq1 = 12; // Column M
+        let cShipped1 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
+
         for (let i = startRow; i < rows.length; i++) {
           const r = rows[i];
           if (!r || !r[cOrderId]) continue;
@@ -473,17 +661,20 @@ async function processSelectedFiles() {
           const status = cStatus !== -1 && r[cStatus] ? String(r[cStatus]).trim() : '';
           const carrier = cCarrier !== -1 && r[cCarrier] ? String(r[cCarrier]).trim() : '';
           const buyer = cBuyer !== -1 && r[cBuyer] ? String(r[cBuyer]).trim() : '';
+          const rawTime1 = (cTimeReq1 !== -1 && r[cTimeReq1]) ? r[cTimeReq1] : ((cShipped1 !== -1 && r[cShipped1]) ? r[cShipped1] : '');
 
           const item = { sku, productName: prodName, variation: varName, quantity: qty, checked: true };
 
           if (!ordersMap.has(orderId)) {
             ordersMap.set(orderId, {
               orderId, trackingId, orderStatus: status, carrier, buyerUsername: buyer,
-              returnReason: '', returnStatus: '', items: [item], checkStatus: 'ยังไม่ตรวจ'
+              returnReason: '', returnStatus: '', items: [item], checkStatus: 'ยังไม่ตรวจ',
+              returnTime: rawTime1
             });
           } else {
             const rec = ordersMap.get(orderId);
             if (trackingId && !rec.trackingId) rec.trackingId = trackingId;
+            if (!rec.returnTime && rawTime1) rec.returnTime = rawTime1;
             rec.items.push(item);
           }
         }
@@ -504,6 +695,12 @@ async function processSelectedFiles() {
         const cReason = h.indexOf('Return Reason');
         const cStatus = h.indexOf('Return Status');
 
+        // Column AB (index 27) or "Shipped Time"
+        let cShipped2 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
+        if (cShipped2 === -1 && h.length > 27) cShipped2 = 27; // Column AB
+        let cTimeReq2 = h.findIndex(col => col && col.toLowerCase().includes('time requested'));
+        if (cTimeReq2 === -1) cTimeReq2 = h.findIndex(col => col && col.toLowerCase().includes('request time'));
+
         for (let i = 1; i < rows.length; i++) {
           const r = rows[i];
           if (!r || !r[cOrderId]) continue;
@@ -514,6 +711,7 @@ async function processSelectedFiles() {
           const qty = cQty !== -1 && !isNaN(parseInt(r[cQty])) ? parseInt(r[cQty]) : 1;
           const reason = cReason !== -1 && r[cReason] ? String(r[cReason]).trim() : '';
           const status = cStatus !== -1 && r[cStatus] ? String(r[cStatus]).trim() : '';
+          const rawTime2 = (cShipped2 !== -1 && r[cShipped2]) ? r[cShipped2] : ((cTimeReq2 !== -1 && r[cTimeReq2]) ? r[cTimeReq2] : '');
 
           const item = { sku, productName: prodName, variation: '', quantity: qty, checked: true };
 
@@ -522,11 +720,13 @@ async function processSelectedFiles() {
             if (retTracking && !rec.trackingId) rec.trackingId = retTracking;
             if (reason) rec.returnReason = reason;
             if (status) rec.returnStatus = status;
+            if (rawTime2) rec.returnTime = rawTime2;
             if (sku && !rec.items.some(it => it.sku === sku)) rec.items.push(item);
           } else {
             ordersMap.set(orderId, {
               orderId, trackingId: retTracking, orderStatus: '', carrier: '', buyerUsername: '',
-              returnReason: reason, returnStatus: status, items: [item], checkStatus: 'ยังไม่ตรวจ'
+              returnReason: reason, returnStatus: status, items: [item], checkStatus: 'ยังไม่ตรวจ',
+              returnTime: rawTime2
             });
           }
         }
@@ -543,6 +743,20 @@ async function processSelectedFiles() {
       const productSummary = data.items.map(it => `${it.productName || 'สินค้า'} x ${it.quantity}`).join(' | ');
       const totalQty = data.items.reduce((s, it) => s + it.quantity, 0);
 
+      // Parse return date and calculate +10 days deadline
+      let returnTimeStr = '';
+      let deadlineStr = '';
+      if (data.returnTime) {
+        const parsedD = parseExcelDate(data.returnTime);
+        if (parsedD) {
+          returnTimeStr = formatDateTime(parsedD);
+          const deadlineD = new Date(parsedD.getTime() + 10 * 24 * 60 * 60 * 1000);
+          deadlineStr = formatDateTime(deadlineD);
+        } else {
+          returnTimeStr = String(data.returnTime).trim();
+        }
+      }
+
       const record = {
         orderId,
         trackingId: data.trackingId || '',
@@ -556,7 +770,9 @@ async function processSelectedFiles() {
         carrier: data.carrier,
         buyerUsername: data.buyerUsername,
         checkStatus: data.checkStatus,
-        staffNote: '', checkedBy: '', checkedAt: '', photoUrl: '', videoUrl: ''
+        staffNote: '', checkedBy: '', checkedAt: '', photoUrl: '', videoUrl: '',
+        returnTime: returnTimeStr,
+        deadlineAt: deadlineStr
       };
 
       if (existingOrderIds.has(String(orderId).trim())) {
@@ -592,6 +808,12 @@ async function processSelectedFiles() {
         <td class="py-2 px-3 font-medium">${o.sellerSku || '-'}</td>
         <td class="py-2 px-3 truncate max-w-xs">${o.productSummary || '-'}</td>
         <td class="py-2 px-3 text-center font-bold">${o.totalQuantity}</td>
+        <td class="py-2 px-3">
+          ${o.returnTime ? `
+            <div class="font-medium text-slate-700">${o.returnTime}</div>
+            <div class="text-[11px] text-blue-600 font-bold">ครบ: ${o.deadlineAt || '-'}</div>
+          ` : `<span class="text-slate-400">-</span>`}
+        </td>
       </tr>
     `).join('');
 
