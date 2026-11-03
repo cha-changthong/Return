@@ -734,8 +734,15 @@ async function processSelectedFiles() {
     }
 
     // Format Aggregated List & Deduplicate Against Existing Database
-    const existingOrderIds = new Set(AdminState.orders.map(o => String(o.orderId || '').trim()));
-    const newOrders = [];
+    const existingOrdersMap = new Map();
+    (AdminState.orders || []).forEach(o => {
+      const oid = String(o.orderId || '').trim();
+      if (oid) existingOrdersMap.set(oid, o);
+    });
+
+    const ordersToImport = [];
+    let newCount = 0;
+    let backfillCount = 0;
     let duplicateCount = 0;
 
     ordersMap.forEach((data, orderId) => {
@@ -757,8 +764,11 @@ async function processSelectedFiles() {
         }
       }
 
+      const cleanOrderId = String(orderId).trim();
+      const existing = existingOrdersMap.get(cleanOrderId);
+
       const record = {
-        orderId,
+        orderId: cleanOrderId,
         trackingId: data.trackingId || '',
         sellerSku: skusSummary,
         productSummary,
@@ -775,35 +785,62 @@ async function processSelectedFiles() {
         deadlineAt: deadlineStr
       };
 
-      if (existingOrderIds.has(String(orderId).trim())) {
-        duplicateCount++;
+      if (existing) {
+        // รายการเดิมที่มีในระบบแล้ว
+        // ตรวจสอบว่าในระบบยังไม่มี returnTime แต่ในไฟล์มี ให้จัดเป็นรายการเติมวันที่ย้อนหลัง
+        const existingHasDate = existing.returnTime && String(existing.returnTime).trim() !== '';
+        if (!existingHasDate && returnTimeStr) {
+          record._type = 'BACKFILL';
+          ordersToImport.push(record);
+          backfillCount++;
+        } else {
+          duplicateCount++;
+        }
       } else {
-        newOrders.push(record);
+        // รายการใหม่ที่ไม่เคยมีในระบบ
+        record._type = 'NEW';
+        ordersToImport.push(record);
+        newCount++;
       }
     });
 
-    AdminState.importedOrders = newOrders;
+    AdminState.importedOrders = ordersToImport;
     Swal.close();
 
-    if (newOrders.length === 0) {
+    if (ordersToImport.length === 0) {
       Swal.fire({
         icon: 'info',
-        title: 'ไม่มีข้อมูลใหม่',
-        text: `คำสั่งซื้อทั้งหมด ${ordersMap.size} รายการ มีอยู่ในระบบแล้ว (ระบบข้ามข้อมูลซ้ำทั้งหมด)`
+        title: 'ไม่มีข้อมูลที่ต้องนำเข้า',
+        text: `คำสั่งซื้อทั้งหมด ${ordersMap.size} รายการ มีอยู่ในระบบและมีวันที่ครบถ้วนแล้ว (ระบบข้ามข้อมูลซ้ำทั้งหมด)`
       });
       return;
     }
 
     // Render Preview
     document.getElementById('import-preview-section').classList.remove('hidden');
-    document.getElementById('import-preview-count').innerHTML = `
-      <span class="text-emerald-600 font-bold">${newOrders.length.toLocaleString()} รายการใหม่</span>
-      ${duplicateCount > 0 ? `<span class="text-slate-400 font-normal text-xs ml-2">(มีอยู่แล้วในระบบ ${duplicateCount} รายการ - จะถูกข้าม)</span>` : ''}
-    `;
+    let previewCountHtml = '';
+    if (newCount > 0) {
+      previewCountHtml += `<span class="text-emerald-600 font-bold">${newCount.toLocaleString()} รายการใหม่</span>`;
+    }
+    if (backfillCount > 0) {
+      if (previewCountHtml) previewCountHtml += ` <span class="text-slate-300">|</span> `;
+      previewCountHtml += `<span class="text-blue-600 font-bold">🔄 เติมวันที่ให้รายการเดิม ${backfillCount.toLocaleString()} รายการ</span>`;
+    }
+    if (duplicateCount > 0) {
+      previewCountHtml += `<span class="text-slate-400 font-normal text-xs ml-2">(มีข้อมูลครบแล้ว ${duplicateCount} รายการ - จะถูกข้าม)</span>`;
+    }
+    document.getElementById('import-preview-count').innerHTML = previewCountHtml;
 
-    document.getElementById('import-preview-tbody').innerHTML = newOrders.slice(0, 10).map(o => `
+    document.getElementById('import-preview-tbody').innerHTML = ordersToImport.slice(0, 15).map(o => `
       <tr class="border-b border-slate-100 text-xs">
-        <td class="py-2 px-3 font-mono font-bold text-slate-800">${o.trackingId || '-'}</td>
+        <td class="py-2 px-3 font-mono font-bold text-slate-800">
+          <div class="flex items-center gap-1.5">
+            ${o._type === 'BACKFILL' 
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">เติมวันที่</span>` 
+              : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">ใหม่</span>`}
+            <span>${o.trackingId || '-'}</span>
+          </div>
+        </td>
         <td class="py-2 px-3 font-mono">${o.orderId}</td>
         <td class="py-2 px-3 font-medium">${o.sellerSku || '-'}</td>
         <td class="py-2 px-3 truncate max-w-xs">${o.productSummary || '-'}</td>
@@ -828,7 +865,7 @@ async function uploadToGoogleSheets() {
 
   Swal.fire({
     title: 'กำลังส่งข้อมูลเข้า Google Sheets...',
-    text: `กำลังบันทึก ${orders.length} ออเดอร์`,
+    text: `กำลังประมวลผล ${orders.length} ออเดอร์`,
     allowOutsideClick: false,
     didOpen: () => Swal.showLoading()
   });
@@ -836,7 +873,8 @@ async function uploadToGoogleSheets() {
   const chunkSize = 250;
   const totalChunks = Math.ceil(orders.length / chunkSize);
   let totalInserted = 0;
-  let totalUpdated = 0;
+  let totalUpdatedDates = 0;
+  let totalSkipped = 0;
 
   try {
     for (let i = 0; i < totalChunks; i++) {
@@ -861,19 +899,30 @@ async function uploadToGoogleSheets() {
 
       if (!result.success) throw new Error(result.error || 'การส่งข้อมูลขัดข้อง');
       totalInserted += (result.insertedCount || 0);
-      totalUpdated += (result.updatedCount || 0);
+      totalUpdatedDates += (result.updatedDatesCount || 0);
+      totalSkipped += (result.skippedCount || 0);
     }
 
-    AdminState.orders = orders;
-    localStorage.setItem('admin_cached_orders', JSON.stringify(orders));
+    let summaryHtml = `<div class="text-left text-sm space-y-1.5 py-1">`;
+    if (totalInserted > 0) {
+      summaryHtml += `<p class="text-emerald-700 font-semibold">✅ เพิ่มรายการใหม่: <b>${totalInserted.toLocaleString()}</b> รายการ</p>`;
+    }
+    if (totalUpdatedDates > 0) {
+      summaryHtml += `<p class="text-blue-700 font-semibold">🔄 เติมวันที่ย้อนหลัง: <b>${totalUpdatedDates.toLocaleString()}</b> รายการ</p>`;
+    }
+    if (totalSkipped > 0) {
+      summaryHtml += `<p class="text-slate-400 text-xs">ข้ามข้อมูลที่มีครบแล้ว: ${totalSkipped.toLocaleString()} รายการ</p>`;
+    }
+    summaryHtml += `</div>`;
 
     Swal.fire({
       icon: 'success',
       title: 'นำเข้าข้อมูลสำเร็จ!',
-      text: `เพิ่มใหม่ ${totalInserted} รายการ, อัปเดต ${totalUpdated} รายการ`,
+      html: summaryHtml,
       confirmButtonText: 'ไปที่แดชบอร์ด',
       confirmButtonColor: '#2563EB'
-    }).then(() => {
+    }).then(async () => {
+      await fetchOrders(true);
       switchAdminTab('dashboard');
     });
 
