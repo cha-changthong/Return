@@ -162,45 +162,41 @@ function parseExcelDate(val) {
   if (!str || str === '-' || str === 'N/A') return null;
 
   // Format 1: YYYY-MM-DD or YYYY/MM/DD
-  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (ymdMatch) {
     const year = parseInt(ymdMatch[1], 10);
     if (year < 2020 || year > 2035) return null;
     const month = parseInt(ymdMatch[2], 10) - 1;
     const day = parseInt(ymdMatch[3], 10);
-    const hour = ymdMatch[4] ? parseInt(ymdMatch[4], 10) : 0;
-    const min = ymdMatch[5] ? parseInt(ymdMatch[5], 10) : 0;
-    const sec = ymdMatch[6] ? parseInt(ymdMatch[6], 10) : 0;
-    const d = new Date(year, month, day, hour, min, sec);
+    const d = new Date(year, month, day);
     return isNaN(d.getTime()) ? null : d;
   }
 
   // Format 2: DD/MM/YYYY or DD-MM-YYYY
-  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (dmyMatch) {
     const day = parseInt(dmyMatch[1], 10);
     const month = parseInt(dmyMatch[2], 10) - 1;
     const year = parseInt(dmyMatch[3], 10);
     if (year < 2020 || year > 2035) return null;
-    const hour = dmyMatch[4] ? parseInt(dmyMatch[4], 10) : 0;
-    const min = dmyMatch[5] ? parseInt(dmyMatch[5], 10) : 0;
-    const sec = dmyMatch[6] ? parseInt(dmyMatch[6], 10) : 0;
-    const d = new Date(year, month, day, hour, min, sec);
+    const d = new Date(year, month, day);
     return isNaN(d.getTime()) ? null : d;
   }
 
   return null;
 }
 
-function formatDateTime(d) {
+function formatDateOnly(d) {
   if (!d || !(d instanceof Date) || isNaN(d.getTime())) return '';
   const pad = n => String(n).padStart(2, '0');
   const year = d.getFullYear();
   const month = pad(d.getMonth() + 1);
   const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const mins = pad(d.getMinutes());
-  return `${year}-${month}-${day} ${hours}:${mins}`;
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateTime(d) {
+  return formatDateOnly(d);
 }
 
 function getOrderOverdueInfo(order) {
@@ -217,28 +213,30 @@ function getOrderOverdueInfo(order) {
   
   const returnDate = parseExcelDate(returnTimeStr);
   if (!deadline && returnDate) {
-    deadline = new Date(returnDate.getTime() + 10 * 24 * 60 * 60 * 1000);
+    deadline = new Date(returnDate.getFullYear(), returnDate.getMonth(), returnDate.getDate() + 10);
   }
   
   if (!deadline) {
     return {
       isOverdue: false,
       daysOverdue: 0,
-      deadlineStr: deadlineAtStr || '-',
-      returnTimeStr: returnTimeStr || '-'
+      deadlineStr: deadlineAtStr ? deadlineAtStr.split(' ')[0] : '-',
+      returnTimeStr: returnTimeStr ? returnTimeStr.split(' ')[0] : '-'
     };
   }
   
   const now = new Date();
-  const diffMs = now.getTime() - deadline.getTime();
+  now.setHours(0, 0, 0, 0);
+  const deadlineDay = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+  const diffMs = now.getTime() - deadlineDay.getTime();
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  const isOverdue = isPending && (diffMs > 0);
+  const isOverdue = isPending && (diffDays > 0);
   
   return {
     isOverdue,
-    daysOverdue: Math.max(0, diffDays + 1),
-    deadlineStr: formatDateTime(deadline),
-    returnTimeStr: returnDate ? formatDateTime(returnDate) : returnTimeStr
+    daysOverdue: Math.max(0, diffDays),
+    deadlineStr: formatDateOnly(deadline),
+    returnTimeStr: returnDate ? formatDateOnly(returnDate) : (returnTimeStr ? returnTimeStr.split(' ')[0] : '-')
   };
 }
 
@@ -634,10 +632,10 @@ async function processSelectedFiles() {
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
       if (rows.length > 0) {
         const h = rows[0].map(c => String(c || '').trim());
-        let startRow = 1;
-        if (rows.length > 1 && String(rows[1][0] || '').includes('Platform unique order ID')) startRow = 2;
+        // ไฟล์คำสั่งซื้อทั้งหมด: เริ่มต้นแถวที่ 3 ใน Excel (index 2)
+        const startRow = 2;
 
-        const cOrderId = h.indexOf('Order ID');
+        const cOrderId = h.indexOf('Order ID') !== -1 ? h.indexOf('Order ID') : 0;
         const cTracking = h.indexOf('Tracking ID');
         const cSku = h.indexOf('Seller SKU');
         const cProd = h.indexOf('Product Name');
@@ -647,14 +645,10 @@ async function processSelectedFiles() {
         const cCarrier = h.indexOf('Shipping Provider Name');
         const cBuyer = h.indexOf('Buyer Username');
 
-        // In "All Orders" file:
-        // Column AB is "Shipped Time" (e.g. "03/10/2026 15:04:44")
-        // Column Y is "Created Time"
-        // IMPORTANT: Column M is "SKU Subtotal Before Discount" (Price) - NEVER use Column M here!
-        let cShipped1 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
+        // ไฟล์คำสั่งซื้อทั้งหมด: ดึงจากคอลัมน์ AB Shipped Time (index 27) เท่านั้น!
+        let cShipped1 = h.indexOf('Shipped Time');
+        if (cShipped1 === -1) cShipped1 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
         if (cShipped1 === -1 && h.length > 27) cShipped1 = 27; // Column AB
-        let cCreated1 = h.findIndex(col => col && col.toLowerCase().includes('created time'));
-        let cTimeReq1 = h.findIndex(col => col && (col.toLowerCase().includes('time requested') || col.toLowerCase().includes('request time')));
 
         for (let i = startRow; i < rows.length; i++) {
           const r = rows[i];
@@ -669,13 +663,12 @@ async function processSelectedFiles() {
           const carrier = cCarrier !== -1 && r[cCarrier] ? String(r[cCarrier]).trim() : '';
           const buyer = cBuyer !== -1 && r[cBuyer] ? String(r[cBuyer]).trim() : '';
           
+          // ดึงจากคอลัมน์ AB (Shipped Time)
           let rawTime1 = '';
           if (cShipped1 !== -1 && r[cShipped1]) {
             rawTime1 = r[cShipped1];
-          } else if (cTimeReq1 !== -1 && r[cTimeReq1]) {
-            rawTime1 = r[cTimeReq1];
-          } else if (cCreated1 !== -1 && r[cCreated1]) {
-            rawTime1 = r[cCreated1];
+          } else if (r[27]) {
+            rawTime1 = r[27];
           }
 
           const item = { sku, productName: prodName, variation: varName, quantity: qty, checked: true };
@@ -702,7 +695,10 @@ async function processSelectedFiles() {
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
       if (rows.length > 0) {
         const h = rows[0].map(c => String(c || '').trim());
-        const cOrderId = h.indexOf('Order ID');
+        // ไฟล์การส่งคืนสินค้า: เริ่มแถวที่ 2 ใน Excel (index 1)
+        const startRow = 1;
+
+        const cOrderId = h.indexOf('Order ID') !== -1 ? h.indexOf('Order ID') : 1;
         const cTracking = h.indexOf('Return Logistics Tracking ID');
         const cSku = h.indexOf('Seller SKU');
         const cProd = h.indexOf('Product Name');
@@ -710,15 +706,12 @@ async function processSelectedFiles() {
         const cReason = h.indexOf('Return Reason');
         const cStatus = h.indexOf('Return Status');
 
-        // In "Returns/Refunds" file:
-        // Column M is "Time Requested" (e.g. "23/09/2026 08:26:58")
-        // Column T is "Refund Time"
-        let cTimeReq2 = h.findIndex(col => col && (col.toLowerCase().includes('time requested') || col.toLowerCase().includes('request time')));
+        // ไฟล์การส่งคืนสินค้า: ดึงจากคอลัมน์ M Time Requested (index 12) เท่านั้น!
+        let cTimeReq2 = h.indexOf('Time Requested');
+        if (cTimeReq2 === -1) cTimeReq2 = h.findIndex(col => col && (col.toLowerCase().includes('time requested') || col.toLowerCase().includes('request time')));
         if (cTimeReq2 === -1 && h.length > 12) cTimeReq2 = 12; // Column M
-        let cRefund2 = h.findIndex(col => col && col.toLowerCase().includes('refund time'));
-        let cShipped2 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
 
-        for (let i = 1; i < rows.length; i++) {
+        for (let i = startRow; i < rows.length; i++) {
           const r = rows[i];
           if (!r || !r[cOrderId]) continue;
           const orderId = String(r[cOrderId]).trim();
@@ -729,13 +722,12 @@ async function processSelectedFiles() {
           const reason = cReason !== -1 && r[cReason] ? String(r[cReason]).trim() : '';
           const status = cStatus !== -1 && r[cStatus] ? String(r[cStatus]).trim() : '';
 
+          // ดึงจากคอลัมน์ M (Time Requested)
           let rawTime2 = '';
           if (cTimeReq2 !== -1 && r[cTimeReq2]) {
             rawTime2 = r[cTimeReq2];
-          } else if (cShipped2 !== -1 && r[cShipped2]) {
-            rawTime2 = r[cShipped2];
-          } else if (cRefund2 !== -1 && r[cRefund2]) {
-            rawTime2 = r[cRefund2];
+          } else if (r[12]) {
+            rawTime2 = r[12];
           }
 
           const item = { sku, productName: prodName, variation: '', quantity: qty, checked: true };
@@ -775,15 +767,15 @@ async function processSelectedFiles() {
       const productSummary = data.items.map(it => `${it.productName || 'สินค้า'} x ${it.quantity}`).join(' | ');
       const totalQty = data.items.reduce((s, it) => s + it.quantity, 0);
 
-      // Parse return date and calculate +10 days deadline
+      // แปลงวันที่และคำนวณวันครบกำหนด (+10 วัน) เฉพาะวันที่ YYYY-MM-DD ตัดเวลาออก
       let returnTimeStr = '';
       let deadlineStr = '';
       if (data.returnTime) {
         const parsedD = parseExcelDate(data.returnTime);
         if (parsedD) {
-          returnTimeStr = formatDateTime(parsedD);
-          const deadlineD = new Date(parsedD.getTime() + 10 * 24 * 60 * 60 * 1000);
-          deadlineStr = formatDateTime(deadlineD);
+          returnTimeStr = formatDateOnly(parsedD);
+          const deadlineD = new Date(parsedD.getFullYear(), parsedD.getMonth(), parsedD.getDate() + 10);
+          deadlineStr = formatDateOnly(deadlineD);
         }
       }
 
@@ -810,12 +802,13 @@ async function processSelectedFiles() {
 
       if (existing) {
         // รายการเดิมที่มีในระบบแล้ว
-        // ตรวจสอบว่าในระบบยังไม่มี returnTime หรือวันที่เดิมผิดปกติ (เช่น ปี < 2020)
-        // และในไฟล์นำเข้ามีวันที่ที่ถูกต้อง (returnTimeStr ไม่ว่าง)
-        const existingHasValidDate = !!parseExcelDate(existing.returnTime);
-        const incomingHasValidDate = !!returnTimeStr;
+        // ถ้าไฟล์นำเข้ามีวันที่ (returnTimeStr)
+        // และ (ในระบบยังไม่มี หรือเป็นวันที่ผิดปกติ หรือมีค่าเดิมไม่ตรงกับไฟล์นำเข้า)
+        const existingReturnTime = String(existing.returnTime || '').trim();
+        const existingValidDate = parseExcelDate(existingReturnTime);
+        const existingDateStr = existingValidDate ? formatDateOnly(existingValidDate) : '';
 
-        if (!existingHasValidDate && incomingHasValidDate) {
+        if (returnTimeStr && (!existingDateStr || existingDateStr !== returnTimeStr)) {
           record._type = 'BACKFILL';
           ordersToImport.push(record);
           backfillCount++;
