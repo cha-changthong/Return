@@ -146,11 +146,17 @@ async function refreshOrdersFromSheet(showToast = false) {
 // ==========================================
 function parseExcelDate(val) {
   if (!val) return null;
-  if (val instanceof Date && !isNaN(val.getTime())) return val;
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    const yr = val.getFullYear();
+    return (yr >= 2020 && yr <= 2035) ? val : null;
+  }
   if (typeof val === 'number') {
-    // Excel date serial number
+    // Excel date serial number (e.g. ~44000 to ~50000)
+    if (val < 10000 || val > 100000) return null;
     const date = new Date(Math.round((val - 25569) * 86400 * 1000));
-    return isNaN(date.getTime()) ? null : date;
+    if (isNaN(date.getTime())) return null;
+    const yr = date.getFullYear();
+    return (yr >= 2020 && yr <= 2035) ? date : null;
   }
   const str = String(val).trim();
   if (!str || str === '-' || str === 'N/A') return null;
@@ -159,13 +165,14 @@ function parseExcelDate(val) {
   const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
   if (ymdMatch) {
     const year = parseInt(ymdMatch[1], 10);
+    if (year < 2020 || year > 2035) return null;
     const month = parseInt(ymdMatch[2], 10) - 1;
     const day = parseInt(ymdMatch[3], 10);
     const hour = ymdMatch[4] ? parseInt(ymdMatch[4], 10) : 0;
     const min = ymdMatch[5] ? parseInt(ymdMatch[5], 10) : 0;
     const sec = ymdMatch[6] ? parseInt(ymdMatch[6], 10) : 0;
     const d = new Date(year, month, day, hour, min, sec);
-    if (!isNaN(d.getTime())) return d;
+    return isNaN(d.getTime()) ? null : d;
   }
 
   // Format 2: DD/MM/YYYY or DD-MM-YYYY
@@ -174,16 +181,13 @@ function parseExcelDate(val) {
     const day = parseInt(dmyMatch[1], 10);
     const month = parseInt(dmyMatch[2], 10) - 1;
     const year = parseInt(dmyMatch[3], 10);
+    if (year < 2020 || year > 2035) return null;
     const hour = dmyMatch[4] ? parseInt(dmyMatch[4], 10) : 0;
     const min = dmyMatch[5] ? parseInt(dmyMatch[5], 10) : 0;
     const sec = dmyMatch[6] ? parseInt(dmyMatch[6], 10) : 0;
     const d = new Date(year, month, day, hour, min, sec);
-    if (!isNaN(d.getTime())) return d;
+    return isNaN(d.getTime()) ? null : d;
   }
-
-  // Fallback to native parse
-  const fallback = new Date(str);
-  if (!isNaN(fallback.getTime())) return fallback;
 
   return null;
 }
@@ -643,11 +647,14 @@ async function processSelectedFiles() {
         const cCarrier = h.indexOf('Shipping Provider Name');
         const cBuyer = h.indexOf('Buyer Username');
 
-        // Column M or "Time Requested"
-        let cTimeReq1 = h.findIndex(col => col && col.toLowerCase().includes('time requested'));
-        if (cTimeReq1 === -1) cTimeReq1 = h.findIndex(col => col && col.toLowerCase().includes('request time'));
-        if (cTimeReq1 === -1 && h.length > 12) cTimeReq1 = 12; // Column M
+        // In "All Orders" file:
+        // Column AB is "Shipped Time" (e.g. "03/10/2026 15:04:44")
+        // Column Y is "Created Time"
+        // IMPORTANT: Column M is "SKU Subtotal Before Discount" (Price) - NEVER use Column M here!
         let cShipped1 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
+        if (cShipped1 === -1 && h.length > 27) cShipped1 = 27; // Column AB
+        let cCreated1 = h.findIndex(col => col && col.toLowerCase().includes('created time'));
+        let cTimeReq1 = h.findIndex(col => col && (col.toLowerCase().includes('time requested') || col.toLowerCase().includes('request time')));
 
         for (let i = startRow; i < rows.length; i++) {
           const r = rows[i];
@@ -661,7 +668,15 @@ async function processSelectedFiles() {
           const status = cStatus !== -1 && r[cStatus] ? String(r[cStatus]).trim() : '';
           const carrier = cCarrier !== -1 && r[cCarrier] ? String(r[cCarrier]).trim() : '';
           const buyer = cBuyer !== -1 && r[cBuyer] ? String(r[cBuyer]).trim() : '';
-          const rawTime1 = (cTimeReq1 !== -1 && r[cTimeReq1]) ? r[cTimeReq1] : ((cShipped1 !== -1 && r[cShipped1]) ? r[cShipped1] : '');
+          
+          let rawTime1 = '';
+          if (cShipped1 !== -1 && r[cShipped1]) {
+            rawTime1 = r[cShipped1];
+          } else if (cTimeReq1 !== -1 && r[cTimeReq1]) {
+            rawTime1 = r[cTimeReq1];
+          } else if (cCreated1 !== -1 && r[cCreated1]) {
+            rawTime1 = r[cCreated1];
+          }
 
           const item = { sku, productName: prodName, variation: varName, quantity: qty, checked: true };
 
@@ -695,11 +710,13 @@ async function processSelectedFiles() {
         const cReason = h.indexOf('Return Reason');
         const cStatus = h.indexOf('Return Status');
 
-        // Column AB (index 27) or "Shipped Time"
+        // In "Returns/Refunds" file:
+        // Column M is "Time Requested" (e.g. "23/09/2026 08:26:58")
+        // Column T is "Refund Time"
+        let cTimeReq2 = h.findIndex(col => col && (col.toLowerCase().includes('time requested') || col.toLowerCase().includes('request time')));
+        if (cTimeReq2 === -1 && h.length > 12) cTimeReq2 = 12; // Column M
+        let cRefund2 = h.findIndex(col => col && col.toLowerCase().includes('refund time'));
         let cShipped2 = h.findIndex(col => col && col.toLowerCase().includes('shipped time'));
-        if (cShipped2 === -1 && h.length > 27) cShipped2 = 27; // Column AB
-        let cTimeReq2 = h.findIndex(col => col && col.toLowerCase().includes('time requested'));
-        if (cTimeReq2 === -1) cTimeReq2 = h.findIndex(col => col && col.toLowerCase().includes('request time'));
 
         for (let i = 1; i < rows.length; i++) {
           const r = rows[i];
@@ -711,7 +728,15 @@ async function processSelectedFiles() {
           const qty = cQty !== -1 && !isNaN(parseInt(r[cQty])) ? parseInt(r[cQty]) : 1;
           const reason = cReason !== -1 && r[cReason] ? String(r[cReason]).trim() : '';
           const status = cStatus !== -1 && r[cStatus] ? String(r[cStatus]).trim() : '';
-          const rawTime2 = (cShipped2 !== -1 && r[cShipped2]) ? r[cShipped2] : ((cTimeReq2 !== -1 && r[cTimeReq2]) ? r[cTimeReq2] : '');
+
+          let rawTime2 = '';
+          if (cTimeReq2 !== -1 && r[cTimeReq2]) {
+            rawTime2 = r[cTimeReq2];
+          } else if (cShipped2 !== -1 && r[cShipped2]) {
+            rawTime2 = r[cShipped2];
+          } else if (cRefund2 !== -1 && r[cRefund2]) {
+            rawTime2 = r[cRefund2];
+          }
 
           const item = { sku, productName: prodName, variation: '', quantity: qty, checked: true };
 
@@ -759,8 +784,6 @@ async function processSelectedFiles() {
           returnTimeStr = formatDateTime(parsedD);
           const deadlineD = new Date(parsedD.getTime() + 10 * 24 * 60 * 60 * 1000);
           deadlineStr = formatDateTime(deadlineD);
-        } else {
-          returnTimeStr = String(data.returnTime).trim();
         }
       }
 
@@ -787,9 +810,12 @@ async function processSelectedFiles() {
 
       if (existing) {
         // รายการเดิมที่มีในระบบแล้ว
-        // ตรวจสอบว่าในระบบยังไม่มี returnTime แต่ในไฟล์มี ให้จัดเป็นรายการเติมวันที่ย้อนหลัง
-        const existingHasDate = existing.returnTime && String(existing.returnTime).trim() !== '';
-        if (!existingHasDate && returnTimeStr) {
+        // ตรวจสอบว่าในระบบยังไม่มี returnTime หรือวันที่เดิมผิดปกติ (เช่น ปี < 2020)
+        // และในไฟล์นำเข้ามีวันที่ที่ถูกต้อง (returnTimeStr ไม่ว่าง)
+        const existingHasValidDate = !!parseExcelDate(existing.returnTime);
+        const incomingHasValidDate = !!returnTimeStr;
+
+        if (!existingHasValidDate && incomingHasValidDate) {
           record._type = 'BACKFILL';
           ordersToImport.push(record);
           backfillCount++;
